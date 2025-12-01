@@ -51,9 +51,9 @@ def test_requirements_file():
 
 
 def test_dockerfile_exists():
-    """Test that dockerfile exists."""
-    dockerfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dockerfile")
-    assert os.path.exists(dockerfile_path), "dockerfile should exist"
+    """Test that Dockerfile exists."""
+    dockerfile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Dockerfile")
+    assert os.path.exists(dockerfile_path), "Dockerfile should exist"
 
 
 if __name__ == "__main__":
