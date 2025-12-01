@@ -1,18 +1,80 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+# GitLab CI/CD Pipeline for ML Visualizer
+# Runs tests, security scans, and Docker builds
+
 stages:
-- test
-- secret-detection
-sast:
-  stage: test
-include:
-- template: Security/Secret-Detection.gitlab-ci.yml
+  - test
+  - security
+  - build
+
 variables:
-  SECRET_DETECTION_ENABLED: 'true'
+  PYTHON_VERSION: "3.12"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# Cache pip packages
+cache:
+  paths:
+    - .cache/pip
+    - .venv/
+
+# Test job - Run unit tests and coverage
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - echo "Running linting with Ruff..."
+    - pip install ruff
+    - ruff check . --output-format=gitlab
+    - echo "Running format check..."
+    - ruff format --check .
+    - echo "Running pytest tests..."
+    - pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+    expire_in: 1 week
+
+# Secret Detection - Scan for leaked secrets
 secret_detection:
-  stage: secret-detection
+  stage: security
+  
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml
+
+# SAST Configuration
+sast:
+  stage: security
+  variables:
+    SAST_EXCLUDED_PATHS: "spec, test, tests, tmp, dsai-app-env"
+
+# Docker build job - Test Docker image builds
+docker-build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker info
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -f Dockerfile .
+    - echo "Testing Docker image health..."
+    - docker run -d --name test-container -p 8501:8501 $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - sleep 15
+    - docker exec test-container curl --fail http://localhost:8501/_stcore/health || exit 1
+    - docker stop test-container
+  only:
+    - main
+    - develop
+    - merge_requests
