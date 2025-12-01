@@ -17,7 +17,9 @@ echo "Logging into ACR..."
 az acr login --name $ACR_NAME
 
 echo "Building Docker image..."
-docker build -t $IMAGE_NAME ./../.
+# Navigate to project root (two directories up from deploy-scripts)
+PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+docker build -t $IMAGE_NAME "$PROJECT_ROOT"
 
 # Tag Docker image mit Version und Latest
 docker tag $IMAGE_NAME $FULL_VERSION_TAG

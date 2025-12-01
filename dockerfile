@@ -56,8 +56,9 @@ COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
 
 # Copy application files
 COPY --chown=appuser:appuser VERSION ./VERSION
-COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser app.py ./app.py
 COPY --chown=appuser:appuser pages/ ./pages/
+COPY --chown=appuser:appuser src/ ./src/
 
 # Create .streamlit config directory
 RUN mkdir -p /app/.streamlit && chown -R appuser:appuser /app/.streamlit
@@ -76,7 +77,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 STOPSIGNAL SIGTERM
 
 # Run the application
-CMD ["streamlit", "run", "src/app.py", \
+CMD ["streamlit", "run", "app.py", \
      "--server.port=8501", \
      "--server.address=0.0.0.0", \
      "--server.enableCORS=false", \

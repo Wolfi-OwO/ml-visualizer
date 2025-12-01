@@ -12,8 +12,6 @@ if [[ -z "$IMAGE_NAME" || -z "$ACR_NAME" || -z "$VERSION" || -z "$WEBAPP_NAME" |
   exit 1
 fi
 
-./3.build-latest-application.sh $IMAGE_NAME $ACR_NAME $VERSION
-
 # Set the new image as the one to be used by the Web App
 echo "Updating Web App $WEBAPP_NAME to use image $ACR_NAME.azurecr.io/$IMAGE_NAME:$VERSION ..."
 az webapp config container set \

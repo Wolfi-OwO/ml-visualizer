@@ -204,13 +204,7 @@ create_web_app() {
 
 # Setup environments
 setup_environments() {
-    log_info "Setting up multi-environment deployment"
-
-    # Create testing environment
-    create_web_app "${AZURE_WEBAPP_NAME}-testing" "testing"
-
-    # Create staging environment
-    create_web_app "${AZURE_WEBAPP_NAME}-staging" "staging"
+    log_info "Setting up production"
 
     # Check if production environment exists, create if not
     if ! az webapp show --name "$AZURE_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &> /dev/null; then
@@ -290,8 +284,6 @@ display_environment_info() {
     log_success "=== ENVIRONMENT SETUP COMPLETE ==="
     echo
     echo "Environment URLs:"
-    echo "  Testing:    https://${AZURE_WEBAPP_NAME}-testing.azurewebsites.net"
-    echo "  Staging:    https://${AZURE_WEBAPP_NAME}-staging.azurewebsites.net"
     echo "  Production: https://${AZURE_WEBAPP_NAME}.azurewebsites.net"
     echo
     echo "Container Registry:"
