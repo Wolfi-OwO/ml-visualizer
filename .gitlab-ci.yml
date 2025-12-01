@@ -1,63 +1,49 @@
-# GitLab CI/CD Pipeline for ML Visualizer
-# Runs tests, security scans, and Docker builds
+# GitLab Auto DevOps with Azure Integration
+# This is an alternative to the manual .gitlab-ci.yml
+# To use this, rename it to .gitlab-ci.yml or enable Auto DevOps in GitLab settings
 
-stages:
-  - test
-  - security
-  - build
+include:
+  - template: Auto-DevOps.gitlab-ci.yml
 
 variables:
-  PYTHON_VERSION: "3.12"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-# Cache pip packages
-cache:
-  paths:
-    - .cache/pip
-    - .venv/
-
-# Test job - Run unit tests and coverage
-test:
-  stage: test
-  image: python:${PYTHON_VERSION}
-  before_script:
-    - python --version
-    - pip install --upgrade pip
-    - pip install -r requirements.txt
-  script:
-    - echo "Running linting with Ruff..."
-    - pip install ruff
-    - ruff check . --output-format=gitlab
-    - echo "Running format check..."
-    - ruff format --check .
-    - echo "Running pytest tests..."
-    - pytest tests/ -v --tb=short --cov=. --cov-report=xml --cov-report=term
-  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
-  artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-    paths:
-      - coverage.xml
-    expire_in: 1 week
-
-# Secret Detection - Scan for leaked secrets
-secret_detection:
-  stage: security
+  # Azure Configuration
+  AZURE_TENANT_ID: "$AZURE_TENANT_ID"
+  AZURE_SUBSCRIPTION_ID: "$AZURE_SUBSCRIPTION_ID"
+  AZURE_CLIENT_ID: "$AZURE_CLIENT_ID"
+  AZURE_CLIENT_SECRET: "$AZURE_CLIENT_SECRET"
+  ACR_NAME: "$ACR_NAME"
   
-include:
-  - template: Security/Secret-Detection.gitlab-ci.yml
-  - template: Security/SAST.gitlab-ci.yml
+  # Container Registry (Azure ACR)
+  CI_REGISTRY: "$ACR_NAME.azurecr.io"
+  CI_REGISTRY_USER: "$AZURE_CLIENT_ID"
+  CI_REGISTRY_PASSWORD: "$AZURE_CLIENT_SECRET"
+  CI_REGISTRY_IMAGE: "$ACR_NAME.azurecr.io/ml-visualizer"
+  
+  # Auto DevOps Configuration
+  AUTO_DEVOPS_PLATFORM_TARGET: "ECS"  # Generic container platform
+  STAGING_ENABLED: "true"
+  INCREMENTAL_ROLLOUT_MODE: "manual"
+  
+  # Resource names per environment
+  TESTING_RESOURCE_GROUP: "rg-mlvisualizer-testing"
+  TESTING_APP_NAME: "app-mlvisualizer-testing"
+  STAGING_RESOURCE_GROUP: "rg-mlvisualizer-staging"
+  STAGING_APP_NAME: "app-mlvisualizer-staging"
+  PRODUCTION_RESOURCE_GROUP: "rg-mlvisualizer-production"
+  PRODUCTION_APP_NAME: "app-mlvisualizer-production"
+  
+  # Disable features not needed for Azure
+  CODE_QUALITY_DISABLED: "false"
+  LICENSE_MANAGEMENT_DISABLED: "true"
+  SAST_DISABLED: "false"
+  SECRET_DETECTION_DISABLED: "false"
+  CONTAINER_SCANNING_DISABLED: "false"
+  DAST_DISABLED: "true"  # Dynamic testing not needed initially
+  PERFORMANCE_DISABLED: "true"
 
-# SAST Configuration
-sast:
-  stage: security
-  variables:
-    SAST_EXCLUDED_PATHS: "spec, test, tests, tmp, dsai-app-env"
-
-# Docker build job - Test Docker image builds
-docker-build:
+# Override Auto DevOps build to use Azure ACR
+build:
+  extends: .auto-deploy
   stage: build
   image: docker:latest
   services:
@@ -65,16 +51,100 @@ docker-build:
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
   before_script:
+    - apk add --no-cache curl
     - docker info
+    - echo $AZURE_CLIENT_SECRET | docker login $ACR_NAME.azurecr.io -u $AZURE_CLIENT_ID --password-stdin
   script:
-    - echo "Building Docker image..."
     - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -f Dockerfile .
-    - echo "Testing Docker image health..."
-    - docker run -d --name test-container -p 8501:8501 $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    - sleep 15
-    - docker exec test-container curl --fail http://localhost:8501/_stcore/health || exit 1
-    - docker stop test-container
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+# Custom Azure deployment for testing
+.deploy_azure_template:
+  image: mcr.microsoft.com/azure-cli:latest
+  before_script:
+    - az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+    - az account set --subscription $AZURE_SUBSCRIPTION_ID
+  script:
+    - |
+      az webapp config container set \
+        --name $AZURE_APP_NAME \
+        --resource-group $AZURE_RESOURCE_GROUP \
+        --docker-custom-image-name $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        --docker-registry-server-url https://$ACR_NAME.azurecr.io
+    - az webapp restart --name $AZURE_APP_NAME --resource-group $AZURE_RESOURCE_GROUP
+    - sleep 30
+    - |
+      for i in {1..10}; do
+        if curl -f https://$AZURE_APP_NAME.azurewebsites.net/_stcore/health; then
+          echo "Deployment successful!"
+          exit 0
+        fi
+        sleep 10
+      done
+      exit 1
+
+# Override testing deployment
+review:
+  extends: .deploy_azure_template
+  stage: review
+  environment:
+    name: testing
+    url: https://$TESTING_APP_NAME.azurewebsites.net
+    on_stop: stop_review
+  variables:
+    AZURE_RESOURCE_GROUP: "$TESTING_RESOURCE_GROUP"
+    AZURE_APP_NAME: "$TESTING_APP_NAME"
+  when: manual
+
+stop_review:
+  extends: .deploy_azure_template
+  stage: cleanup
+  environment:
+    name: testing
+    action: stop
+  variables:
+    AZURE_RESOURCE_GROUP: "$TESTING_RESOURCE_GROUP"
+    AZURE_APP_NAME: "$TESTING_APP_NAME"
+  script:
+    - az webapp stop --name $AZURE_APP_NAME --resource-group $AZURE_RESOURCE_GROUP
+  when: manual
+
+# Override staging deployment
+staging:
+  extends: .deploy_azure_template
+  stage: staging
+  environment:
+    name: staging
+    url: https://$STAGING_APP_NAME.azurewebsites.net
+  variables:
+    AZURE_RESOURCE_GROUP: "$STAGING_RESOURCE_GROUP"
+    AZURE_APP_NAME: "$STAGING_APP_NAME"
+  when: manual
+
+# Override production deployment
+production:
+  extends: .deploy_azure_template
+  stage: production
+  environment:
+    name: production
+    url: https://$PRODUCTION_APP_NAME.azurewebsites.net
+  variables:
+    AZURE_RESOURCE_GROUP: "$PRODUCTION_RESOURCE_GROUP"
+    AZURE_APP_NAME: "$PRODUCTION_APP_NAME"
+  before_script:
+    - az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+    - az account set --subscription $AZURE_SUBSCRIPTION_ID
+    # Create backup slot
+    - |
+      az webapp deployment slot create \
+        --name $PRODUCTION_APP_NAME \
+        --resource-group $PRODUCTION_RESOURCE_GROUP \
+        --slot backup-$(date +%Y%m%d-%H%M%S) \
+        --configuration-source $PRODUCTION_APP_NAME || true
+  when: manual
   only:
     - main
-    - develop
-    - merge_requests
