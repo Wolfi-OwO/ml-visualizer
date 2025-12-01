@@ -63,7 +63,7 @@ Use this checklist to ensure all steps are completed when setting up your produc
 ##  GitHub Configuration
 
 ### Service Principal Setup
-- [ ] Create service principal: 
+- [ ] Create service principal:
   ```bash
   az ad sp create-for-rbac --name "ml-visualizer-cicd" \
     --role contributor \
@@ -321,8 +321,8 @@ Your production-ready ML Visualizer is now fully deployed and operational!
 
 ---
 
-**Deployment Date**: ________________  
-**Deployed By**: ____________________  
+**Deployment Date**: ________________
+**Deployed By**: ____________________
 **Version**: 1.0.0
 
 
@@ -497,13 +497,13 @@ chmod +x infrastructure/deploy.sh infrastructure/destroy.sh
 
 Each environment creates:
 
- **Resource Group**: Isolated resources per environment  
- **Container Registry**: Docker image storage (shared or per-env)  
- **App Service Plan**: Compute resources with auto-scaling  
- **App Service**: Web application hosting  
- **Application Insights**: Monitoring and analytics  
- **Log Analytics**: Centralized logging  
- **Alerts**: CPU, memory, error monitoring  
+ **Resource Group**: Isolated resources per environment
+ **Container Registry**: Docker image storage (shared or per-env)
+ **App Service Plan**: Compute resources with auto-scaling
+ **App Service**: Web application hosting
+ **Application Insights**: Monitoring and analytics
+ **Log Analytics**: Centralized logging
+ **Alerts**: CPU, memory, error monitoring
 
 ### Manual Bicep Deployment
 
@@ -862,6 +862,6 @@ az webapp stop --name ml-visualizer-testing \
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: December 2025  
+**Version**: 1.0.0
+**Last Updated**: December 2025
 **Maintained By**: DevOps Team

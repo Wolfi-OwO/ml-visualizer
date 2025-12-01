@@ -765,7 +765,7 @@ After successful setup:
    ```bash
    # Check current costs
    az consumption usage list --output table
-   
+
    # Set up cost alerts in Azure Portal
    ```
 
@@ -797,6 +797,6 @@ For ongoing operations, refer to:
 
 ---
 
-**Setup Version**: 1.0.0  
-**Last Updated**: December 2025  
+**Setup Version**: 1.0.0
+**Last Updated**: December 2025
 **Author**: DevOps Team

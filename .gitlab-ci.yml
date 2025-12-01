@@ -12,18 +12,18 @@ variables:
   AZURE_CLIENT_ID: "$AZURE_CLIENT_ID"
   AZURE_CLIENT_SECRET: "$AZURE_CLIENT_SECRET"
   ACR_NAME: "$ACR_NAME"
-  
+
   # Container Registry (Azure ACR)
   CI_REGISTRY: "$ACR_NAME.azurecr.io"
   CI_REGISTRY_USER: "$AZURE_CLIENT_ID"
   CI_REGISTRY_PASSWORD: "$AZURE_CLIENT_SECRET"
   CI_REGISTRY_IMAGE: "$ACR_NAME.azurecr.io/ml-visualizer"
-  
+
   # Auto DevOps Configuration
   AUTO_DEVOPS_PLATFORM_TARGET: "ECS"  # Generic container platform
   STAGING_ENABLED: "true"
   INCREMENTAL_ROLLOUT_MODE: "manual"
-  
+
   # Resource names per environment
   TESTING_RESOURCE_GROUP: "rg-mlvisualizer-testing"
   TESTING_APP_NAME: "app-mlvisualizer-testing"
@@ -31,7 +31,7 @@ variables:
   STAGING_APP_NAME: "app-mlvisualizer-staging"
   PRODUCTION_RESOURCE_GROUP: "rg-mlvisualizer-production"
   PRODUCTION_APP_NAME: "app-mlvisualizer-production"
-  
+
   # Disable features not needed for Azure
   CODE_QUALITY_DISABLED: "false"
   LICENSE_MANAGEMENT_DISABLED: "true"

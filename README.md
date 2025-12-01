@@ -169,7 +169,7 @@ az appservice plan update \
 
 Environment-specific configuration files in `/config`:
 - `development.env` - Local development
-- `testing.env` - Testing environment  
+- `testing.env` - Testing environment
 - `staging.env` - Staging environment
 - `production.env` - Production environment
 
@@ -259,6 +259,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: December 2025  
+**Version**: 1.0.0
+**Last Updated**: December 2025
 **Status**: Production Ready

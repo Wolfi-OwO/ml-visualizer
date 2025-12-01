@@ -3,12 +3,12 @@
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 from .config import get_environment, get_version
 
 
-def get_health_status() -> Dict[str, Any]:
+def get_health_status() -> dict[str, Any]:
     """
     Get comprehensive health status of the application.
 

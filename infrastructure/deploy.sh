@@ -64,16 +64,16 @@ az deployment sub create \
 
 if [ $? -eq 0 ]; then
     print_info "✅ Deployment successful!"
-    
+
     # Get outputs
     print_info "Fetching deployment outputs..."
-    
+
     RESOURCE_GROUP=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs.resourceGroupName.value -o tsv)
     ACR_NAME=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs.acrName.value -o tsv)
     ACR_LOGIN_SERVER=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs.acrLoginServer.value -o tsv)
     APP_SERVICE_NAME=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs.appServiceName.value -o tsv)
     APP_SERVICE_URL=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs.appServiceUrl.value -o tsv)
-    
+
     echo ""
     print_info "=== Deployment Details ==="
     echo "Resource Group: $RESOURCE_GROUP"
@@ -82,19 +82,19 @@ if [ $? -eq 0 ]; then
     echo "App Service Name: $APP_SERVICE_NAME"
     echo "App Service URL: $APP_SERVICE_URL"
     echo ""
-    
+
     # Save outputs to file
     OUTPUT_FILE="infrastructure/outputs/${ENVIRONMENT}-outputs.json"
     mkdir -p infrastructure/outputs
-    
+
     az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs -o json > "$OUTPUT_FILE"
     print_info "Outputs saved to: $OUTPUT_FILE"
-    
+
     # Configure ACR credentials for App Service
     print_info "Configuring ACR credentials for App Service..."
     ACR_USERNAME=$(az acr credential show --name "$ACR_NAME" --query username -o tsv)
     ACR_PASSWORD=$(az acr credential show --name "$ACR_NAME" --query passwords[0].value -o tsv)
-    
+
     az webapp config container set \
         --name "$APP_SERVICE_NAME" \
         --resource-group "$RESOURCE_GROUP" \
@@ -102,13 +102,13 @@ if [ $? -eq 0 ]; then
         --docker-registry-server-user "$ACR_USERNAME" \
         --docker-registry-server-password "$ACR_PASSWORD" \
         --output none
-    
+
     print_info "✅ Infrastructure deployment complete!"
     print_info "Next steps:"
     echo "  1. Configure GitHub secrets with ACR credentials"
     echo "  2. Push your first image: docker push $ACR_LOGIN_SERVER/$PROJECT_NAME:latest"
     echo "  3. Access your app at: $APP_SERVICE_URL"
-    
+
 else
     print_error "❌ Deployment failed!"
     exit 1
