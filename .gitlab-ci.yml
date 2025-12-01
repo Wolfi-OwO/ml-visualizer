@@ -17,7 +17,7 @@ variables:
   DOCKER_IMAGE_URI: "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}"
   VERSION: "${CI_COMMIT_SHORT_SHA}"
   LATEST_TAG: "latest"
-  APP_DIR: "DSAI-5BHIF-Application"
+  APP_DIR: "."
   VERSION_FILE: "VERSION"
 
   # Environment Configuration
@@ -92,22 +92,22 @@ check-dockerfile:
   script:
     - |
       echo "Checking Dockerfile exists..."
-      if [ ! -f "${APP_DIR}/dockerfile" ]; then
-        echo "Error: Dockerfile not found in ${APP_DIR}/"
+      if [ ! -f "Dockerfile" ]; then
+        echo "Error: Dockerfile not found"
         exit 1
       fi
       echo "OK: Dockerfile found"
     - |
       echo "Checking requirements.txt exists..."
-      if [ ! -f "${APP_DIR}/requirements.txt" ]; then
-        echo "Error: requirements.txt not found in ${APP_DIR}/"
+      if [ ! -f "requirements.txt" ]; then
+        echo "Error: requirements.txt not found"
         exit 1
       fi
       echo "OK: requirements.txt found"
     - |
       echo "Dockerfile validation completed" > dockerfile-validation.txt
-      wc -l ${APP_DIR}/dockerfile >> dockerfile-validation.txt
-      wc -l ${APP_DIR}/requirements.txt >> dockerfile-validation.txt
+      wc -l Dockerfile >> dockerfile-validation.txt
+      wc -l requirements.txt >> dockerfile-validation.txt
   artifacts:
     when: always
     paths:
@@ -122,7 +122,6 @@ ruff-check:
   stage: lint
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir ruff
   script:
     - |
@@ -150,9 +149,9 @@ ruff-check:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/ruff-results.txt
+      - ruff-results.txt
     reports:
-      codequality: $APP_DIR/ruff-report.json
+      codequality: ruff-report.json
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -163,7 +162,6 @@ black-check:
   stage: lint
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir black
   script:
     - |
@@ -189,7 +187,7 @@ black-check:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/black-results.txt
+      - black-results.txt
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -200,7 +198,6 @@ syntax-check:
   stage: test
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir -r requirements.txt
   script:
     - |
@@ -220,7 +217,7 @@ syntax-check:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/syntax-report.txt
+      - syntax-report.txt
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -231,7 +228,6 @@ unit-tests:
   stage: test
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir -r requirements.txt
   script:
     - |
@@ -274,16 +270,16 @@ unit-tests:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/test-report.txt
-      - $APP_DIR/pytest-output.txt
-      - $APP_DIR/coverage.xml
-      - $APP_DIR/htmlcov/
-      - $APP_DIR/junit.xml
+      - test-report.txt
+      - pytest-output.txt
+      - coverage.xml
+      - htmlcov/
+      - junit.xml
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: $APP_DIR/coverage.xml
-      junit: $APP_DIR/junit.xml
+        path: coverage.xml
+      junit: junit.xml
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -298,7 +294,6 @@ bandit-scan:
   stage: security
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir bandit
   script:
     - |
@@ -324,8 +319,8 @@ bandit-scan:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/security-report.txt
-      - $APP_DIR/bandit-report.json
+      - security-report.txt
+      - bandit-report.json
     expire_in: 1 week
   allow_failure: true
   rules:
@@ -337,7 +332,6 @@ dependency-audit:
   stage: security
   image: python:3.10-slim
   before_script:
-    - cd $APP_DIR
     - pip install --no-cache-dir pip-audit
   script:
     - |
@@ -362,8 +356,8 @@ dependency-audit:
   artifacts:
     when: always
     paths:
-      - $APP_DIR/dependency-report.txt
-      - $APP_DIR/pip-audit.json
+      - dependency-report.txt
+      - pip-audit.json
     expire_in: 1 week
   allow_failure: true
   rules:
@@ -394,7 +388,7 @@ docker-build:
       echo "$AZURE_CLIENT_SECRET" | docker login "$DOCKER_REGISTRY" --username "$AZURE_CLIENT_ID" --password-stdin
     - |
       echo "Building Docker image..."
-      docker build -f ${APP_DIR}/dockerfile -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} -t ${DOCKER_IMAGE_NAME}:${LATEST_TAG} .
+      docker build -f Dockerfile -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} -t ${DOCKER_IMAGE_NAME}:${LATEST_TAG} .
     - |
       echo "Tagging image for ACR..."
       docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_IMAGE_URI}:${IMAGE_TAG}
