@@ -1,0 +1,39 @@
+# Docker Compose for local development
+# Usage: docker-compose -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: ml-visualizer-dev
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./pages:/app/pages
+      - ./VERSION:/app/VERSION
+      - ./.streamlit:/app/.streamlit
+    environment:
+      - ENVIRONMENT_NAME=development
+      - LOG_LEVEL=DEBUG
+      - ENABLE_DEBUG_MODE=true
+      - ENABLE_METRICS=true
+      - MOCK_DATA_ENABLED=true
+      - ENABLE_TEST_ENDPOINTS=true
+    restart: unless-stopped
+    networks:
+      - ml-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  ml-network:
+    driver: bridge

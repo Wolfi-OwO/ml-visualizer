@@ -1,0 +1,34 @@
+**/dsai-app-env
+.ruff_cache
+**/__pycache__
+
+# Coverage
+**/.coverage
+**/coverage.xml
+**/htmlcov/
+**/.coverage.*
+
+# Testing
+**/.pytest_cache/
+**/junit.xml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Security reports
+**/bandit-report.json
+**/pip-audit.json
+
+# Local environment
+.env
+.env.local
+*.local

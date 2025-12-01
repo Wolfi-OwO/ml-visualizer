@@ -1,93 +1,264 @@
-# 5bhif Datascience Webapp
+# ML Visualizer - Interactive Machine Learning Demonstrations
 
+A production-ready web application for visualizing machine learning algorithms including Gradient Descent, Perceptron, KNN, and Neural Networks. Built with Streamlit and deployed on Azure with complete CI/CD pipelines.
 
+[![CI](https://github.com/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-repo/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Getting started
+## Features
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- Interactive real-time ML algorithm demonstrations
+- Multiple algorithms: Gradient Descent, Perceptron, KNN, Neural Networks
+- Production-ready with multi-stage Docker builds and auto-scaling
+- Complete CI/CD pipeline with automated testing and deployment
+- Three environments: Testing, Staging, and Production
+- Infrastructure as Code using Azure Bicep templates
+- Comprehensive monitoring with Application Insights and alerts
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Quick Start
 
-## Add your files
+### Local Development
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd Datascience-ArtificialIntelligence-Webpage
+
+# Start with Docker Compose (recommended)
+docker compose -f docker-compose.dev.yml up
+
+# Or without Docker
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+streamlit run src/app.py
+```
+
+Visit http://localhost:8501
+
+### Run Tests
+
+```bash
+pip install -r requirements.txt
+pytest tests/ -v --cov=src --cov-report=html
+```
+
+## Project Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/woofi4/Projects/5bhif-datascience-webapp.git
-git branch -M main
-git push -uf origin main
+.
+├── .github/workflows/      # CI/CD pipelines
+├── config/                 # Environment configurations
+├── infrastructure/         # Azure Bicep IaC templates
+├── src/                    # Application source code
+│   ├── app.py              # Main entry point
+│   ├── pages/              # ML visualization pages
+│   └── utils/              # Configuration and utilities
+├── tests/                  # Test suite
+├── docker/                 # Docker configurations
+├── Dockerfile              # Production Docker image
+└── docker-compose.*.yml    # Environment-specific compose files
 ```
 
-## Integrate with your tools
+## Deployment Environments
 
-* [Set up project integrations](https://gitlab.com/woofi4/Projects/5bhif-datascience-webapp/-/settings/integrations)
+| Environment | Branch   | Auto-Deploy | Approval Required |
+|------------|----------|-------------|-------------------|
+| Testing    | develop  | Yes         | No                |
+| Staging    | staging  | Yes         | No                |
+| Production | main     | Yes         | Yes               |
 
-## Collaborate with your team
+## Architecture
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Deployment Flow
+```
+feature/* → develop → staging → main
+           (testing) (staging) (production)
+```
 
-## Test and Deploy
+### Infrastructure Components
+- Azure Container Registry: Docker image storage
+- Azure App Service: Application hosting with auto-scaling
+- Application Insights: Monitoring and analytics
+- Log Analytics: Centralized logging
+- Automated alerts: CPU, memory, errors, response time
 
-Use the built-in continuous integration in GitLab.
+### Auto-Scaling Configuration
+- Scale out when CPU > 70% or Memory > 80%
+- Scale in when CPU < 30% for 10 minutes
+- Instance limits per environment:
+  - Testing: 1-3 instances
+  - Staging: 1-5 instances
+  - Production: 2-10 instances
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Technology Stack
 
-***
+- **Application**: Python 3.12, Streamlit
+- **Containerization**: Docker, Docker Compose
+- **Cloud Platform**: Azure App Service, Azure Container Registry
+- **CI/CD**: GitHub Actions
+- **Infrastructure**: Azure Bicep
+- **Testing**: pytest, pytest-cov
+- **Code Quality**: Ruff (linting and formatting)
+- **Monitoring**: Application Insights, Log Analytics
 
-# Editing this README
+## Documentation
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- **[SETUP.md](SETUP.md)** - Complete setup guide from scratch
+- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Deployment verification checklist
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Common commands and operations
+- **[config/README.md](config/README.md)** - Configuration documentation
 
-## Suggestions for a good README
+## Setup and Deployment
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+For complete setup instructions, see [SETUP.md](SETUP.md).
 
-## Name
-Choose a self-explaining name for your project.
+Quick overview:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```bash
+# 1. Deploy Azure infrastructure
+./infrastructure/deploy.sh testing westeurope
+./infrastructure/deploy.sh staging westeurope
+./infrastructure/deploy.sh production westeurope
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+# 2. Configure GitHub secrets (see SETUP.md)
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+# 3. Deploy application
+git push origin develop   # Deploys to testing
+git push origin staging   # Deploys to staging
+git push origin main      # Deploys to production (requires approval)
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Development Workflow
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+1. Create feature branch from `develop`
+2. Make changes and add tests
+3. Run tests locally: `pytest tests/ -v`
+4. Commit and push
+5. Create pull request to `develop`
+6. CI pipeline validates changes
+7. After merge, auto-deploy to testing
+8. Promote through staging to production
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Monitoring and Operations
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Health Checks
+```bash
+# Check application health
+curl https://ml-visualizer-prod.azurewebsites.net/_stcore/health
+```
+
+### View Logs
+```bash
+# Stream logs
+az webapp log tail --name ml-visualizer-prod \
+  --resource-group ml-visualizer-production-rg
+```
+
+### Scaling
+```bash
+# Manual scale
+az appservice plan update \
+  --name ml-visualizer-production-plan \
+  --resource-group ml-visualizer-production-rg \
+  --number-of-workers 5
+```
+
+## Configuration
+
+Environment-specific configuration files in `/config`:
+- `development.env` - Local development
+- `testing.env` - Testing environment  
+- `staging.env` - Staging environment
+- `production.env` - Production environment
+
+See [config/README.md](config/README.md) for all available options.
+
+## CI/CD Pipeline
+
+### Workflows
+
+**ci.yml** - Runs on all pushes and pull requests
+- Multi-version Python testing (3.10, 3.11, 3.12)
+- Linting and code formatting checks
+- Security vulnerability scanning
+- Docker build validation
+- Test execution with coverage reporting
+
+**deploy-testing.yml** - Deploys to testing environment
+- Triggered by push to `develop` branch
+- Builds and pushes Docker image to ACR
+- Deploys to Azure App Service
+- Runs health checks
+
+**deploy-staging.yml** - Deploys to staging environment
+- Triggered by push to `staging` branch
+- Includes smoke tests
+- Pre-production validation
+
+**deploy-production.yml** - Deploys to production
+- Triggered by push to `main` branch
+- Requires manual approval
+- Creates backup deployment slots
+- Comprehensive health checks
+- Supports rollback
+
+## Security
+
+- Non-root user in Docker containers
+- Multi-stage builds for minimal attack surface
+- Security scanning in CI pipeline
+- HTTPS enforced in production
+- Secrets managed via Azure Key Vault and GitHub Secrets
+- No hardcoded credentials
+- Regular dependency updates
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/new-feature`
+3. Make changes and add tests
+4. Run tests: `pytest tests/ -v`
+5. Run linting: `ruff check .`
+6. Commit changes: `git commit -m 'Add new feature'`
+7. Push to branch: `git push origin feature/new-feature`
+8. Create Pull Request
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Troubleshooting
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Common issues and solutions are documented in [SETUP.md](SETUP.md#troubleshooting).
+
+Quick checks:
+```bash
+# Check Azure resources
+az resource list --resource-group ml-visualizer-production-rg
+
+# Check app service status
+az webapp show --name ml-visualizer-prod \
+  --resource-group ml-visualizer-production-rg --query state
+
+# Restart application
+az webapp restart --name ml-visualizer-prod \
+  --resource-group ml-visualizer-production-rg
+```
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+This project is licensed under the MIT License.
+
+## Authors
+
+**Kofler Phillip** - HTL V - Informatik
+
+## Acknowledgments
+
+- Built with [Streamlit](https://streamlit.io/)
+- Deployed on [Microsoft Azure](https://azure.microsoft.com/)
+- CI/CD powered by [GitHub Actions](https://github.com/features/actions)
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: December 2025  
+**Status**: Production Ready

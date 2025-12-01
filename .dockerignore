@@ -1,0 +1,4 @@
+deploy-scripts/*
+ci-cd-pipeline
+.ruff_cache
+tests

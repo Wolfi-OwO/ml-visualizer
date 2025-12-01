@@ -1,0 +1,38 @@
+# Docker Compose for staging environment
+# Usage: docker-compose -f docker-compose.staging.yml up
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ml-visualizer-staging
+    ports:
+      - "8501:8501"
+    env_file:
+      - ./config/staging.env
+    environment:
+      - ENVIRONMENT_NAME=staging
+    restart: always
+    networks:
+      - ml-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+networks:
+  ml-network:
+    driver: bridge

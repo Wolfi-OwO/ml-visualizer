@@ -1,0 +1,19 @@
+# Streamlit webapi
+streamlit
+
+# statistics and ml
+numpy
+matplotlib
+pandas
+altair
+streamlit-drawable-canvas
+plotly
+
+# Development dependencies
+ruff
+black
+pre-commit
+
+# Testing dependencies
+pytest
+pytest-cov
