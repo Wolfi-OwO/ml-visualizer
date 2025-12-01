@@ -909,6 +909,7 @@ deploy-production:
     name: production
     url: https://${PRODUCTION_WEBAPP_NAME}.azurewebsites.net
     on_stop: stop-production
+    action: start
   allow_failure: false
 
 rollback-to-latest:
