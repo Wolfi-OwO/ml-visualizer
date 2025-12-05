@@ -85,6 +85,9 @@ check-variables:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME != "main"
     - if: $CI_COMMIT_REF_NAME == "main"
+  environment:
+    name: testing
+    action: start
 
 check-dockerfile:
   stage: validate
@@ -364,6 +367,9 @@ dependency-audit:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME != "main"
     - if: $CI_COMMIT_REF_NAME == "main"
+  environment:
+    name: testing
+    action: stop
 
 docker-build:
   stage: build
