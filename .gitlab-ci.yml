@@ -985,7 +985,6 @@ rollback-to-latest:
   environment:
     name: production
     url: https://${AZURE_WEBAPP_NAME}.azurewebsites.net
-    action: start
 
 rollback-to-version:
   stage: deploy:production
