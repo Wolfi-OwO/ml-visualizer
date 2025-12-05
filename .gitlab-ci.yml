@@ -454,8 +454,8 @@ push-to-staging:
           --data '{
             "state": "pending",
             "name": "staging/mr-*",
-            "target_url": "'"${CI_PROJECT_URL}/-/pipelines"'",
-            "description": "Waiting for staging deployment and cleanup"
+            "target_url": "'"${CI_PROJECT_URL}/-/environments"'",
+            "description": "Deploy to staging environment and test before cleanup"
           }' \
           "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/statuses/${CI_COMMIT_SHA}"
         echo "MR merge is now BLOCKED until staging is tested and cleaned up"
@@ -519,7 +519,7 @@ deploy-staging:
   image: mcr.microsoft.com/azure-cli:latest
   rules:
     - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
-      when: on_success
+      when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -602,10 +602,20 @@ deploy-staging:
     - |
       echo "Staging deployment completed successfully!"
       echo "Staging URL: https://${STAGING_WEBAPP_NAME}.azurewebsites.net"
+      echo ""
+      echo "============================================"
+      echo "TESTING INSTRUCTIONS:"
+      echo "============================================"
+      echo "1. Test the application at: https://${STAGING_WEBAPP_NAME}.azurewebsites.net"
+      echo "2. Verify all functionality works as expected"
+      echo "3. When testing is complete, run 'stop-staging' job to:"
+      echo "   - Delete the staging environment"
+      echo "   - Unblock the MR for merging"
+      echo "   - Clean up the staging branch"
+      echo "============================================"
+      echo ""
       echo "Staging deployment completed at $(date)" >> staging-deployment-report.txt
-      echo "Status: SUCCESS" >> staging-deployment-report.txt
-      echo "Note: Commit status was already set to PENDING by push-to-staging job"
-      echo "Run stop-staging to unblock the MR for merging"
+      echo "Status: SUCCESS - Ready for testing" >> staging-deployment-report.txt
   artifacts:
     when: always
     paths:
@@ -615,6 +625,8 @@ deploy-staging:
     name: staging
     url: https://${STAGING_WEBAPP_NAME}.azurewebsites.net
     on_stop: stop-staging
+    deployment_tier: staging
+    auto_stop_in: 3 days
 
 stop-staging:
   stage: deploy:staging
@@ -792,7 +804,7 @@ deploy-production:
   image: mcr.microsoft.com/azure-cli:latest
   rules:
     - if: $CI_COMMIT_REF_NAME == "main"
-      when: on_success
+      when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -887,9 +899,17 @@ deploy-production:
     - |
       # Success notifications
       echo "PRODUCTION DEPLOYMENT SUCCESSFUL!"
+      echo ""
+      echo "============================================"
+      echo "PRODUCTION DEPLOYMENT COMPLETE"
+      echo "============================================"
       echo "Production URL: https://${PRODUCTION_WEBAPP_NAME}.azurewebsites.net"
       echo "Deployed version: $IMAGE_TAG"
       echo "Pipeline ID: $CI_PIPELINE_ID"
+      echo ""
+      echo "Please verify the production application is working correctly."
+      echo "============================================"
+      echo ""
 
       echo "Production deployment COMPLETED SUCCESSFULLY!" >> production-deployment-report.txt
       echo "Production URL: https://${PRODUCTION_WEBAPP_NAME}.azurewebsites.net" >> production-deployment-report.txt
