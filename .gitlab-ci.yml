@@ -206,8 +206,8 @@ syntax-check:
     - |
       echo "Running Python syntax checks..."
       echo "Syntax check results:" > syntax-report.txt
-      python -m py_compile app.py
-      echo "app.py: OK" >> syntax-report.txt
+      python -m py_compile ./src/app.py
+      echo "./src/app.py: OK" >> syntax-report.txt
       for file in pages/*.py; do
         python -m py_compile "$file"
         echo "$file: OK" >> syntax-report.txt
