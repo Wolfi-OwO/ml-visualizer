@@ -572,11 +572,11 @@ with col2:
     # Fehler
     error = abs(output_activation - expected_output)
     if error < 0.1:
-        st.success(f"✓ Korrekt! Error: {error:.4f}")
+        st.success(f"Korrekt! Error: {error:.4f}")
     elif error < 0.3:
         st.warning(f"Unsicher. Error: {error:.4f}")
     else:
-        st.error(f"✗ Falsch! Error: {error:.4f}")
+        st.error(f"Falsch! Error: {error:.4f}")
 
 st.divider()
 

@@ -185,7 +185,7 @@ if classify_button and len(st.session_state.unclassified_points) > 0:
             predicted_class = max(set(nearest_classes), key=nearest_classes.count)
             new_point = (ux, uy, predicted_class)
             st.session_state.points.append(new_point)
-            st.success(f"✓ Punkt ({ux:.3f}, {uy:.3f}) → Klasse **{predicted_class}**")
+            st.success(f"Punkt ({ux:.3f}, {uy:.3f}) → Klasse **{predicted_class}**")
 
         # Lösche unklassifizierte Punkte
         st.session_state.unclassified_points = []

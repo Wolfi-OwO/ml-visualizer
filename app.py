@@ -28,10 +28,10 @@ APP_VERSION = get_version()
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("Options")
 
-gradient_descent = st.Page("./pages/gradient-descent.py", title="Gradient Descent")
-perceptron = st.Page("./pages/perceptron.py", title="Perceptron")
-knn_visualizer = st.Page("./pages/knn-visualize.py", title="KNN Visualizer")
-neuronal_net = st.Page("./pages/neuronal-net.py", title="Neuronal Network")
+gradient_descent = st.Page("./src/pages/gradient-descent.py", title="Gradient Descent")
+perceptron = st.Page("./src/pages/perceptron.py", title="Perceptron")
+knn_visualizer = st.Page("./src/pages/knn-visualize.py", title="KNN Visualizer")
+neuronal_net = st.Page("./src/pages/neuronal-net.py", title="Neuronal Network")
 
 pg = st.navigation([gradient_descent, perceptron, knn_visualizer, neuronal_net])
 st.set_page_config(page_title="ML Visualizer", page_icon=":material/edit:")
