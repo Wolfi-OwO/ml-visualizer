@@ -35,7 +35,7 @@ pip install -r requirements.txt
 streamlit run src/app.py
 ```
 
-Visit http://localhost:8501
+Visit <http://localhost:8501>
 
 ### Run Tests
 
@@ -46,7 +46,7 @@ pytest tests/ -v --cov=src --cov-report=html
 
 ## Project Structure
 
-```
+```text
 .
 ├── .github/workflows/      # CI/CD pipelines
 ├── config/                 # Environment configurations
@@ -63,21 +63,23 @@ pytest tests/ -v --cov=src --cov-report=html
 
 ## Deployment Environments
 
-| Environment | Branch   | Auto-Deploy | Approval Required |
-|------------|----------|-------------|-------------------|
-| Testing    | develop  | Yes         | No                |
-| Staging    | staging  | Yes         | No                |
-| Production | main     | Yes         | Yes               |
+| Environment | Branch  | Auto-Deploy | Approval Required |
+|-------------|---------|-------------|-------------------|
+| Testing     | develop | Yes         | No                |
+| Staging     | staging | Yes         | No                |
+| Production  | main    | Yes         | Yes               |
 
 ## Architecture
 
 ### Deployment Flow
-```
+
+```text
 feature/* → develop → staging → main
            (testing) (staging) (production)
 ```
 
 ### Infrastructure Components
+
 - Azure Container Registry: Docker image storage
 - Azure App Service: Application hosting with auto-scaling
 - Application Insights: Monitoring and analytics
@@ -85,6 +87,7 @@ feature/* → develop → staging → main
 - Automated alerts: CPU, memory, errors, response time
 
 ### Auto-Scaling Configuration
+
 - Scale out when CPU > 70% or Memory > 80%
 - Scale in when CPU < 30% for 10 minutes
 - Instance limits per environment:
@@ -144,12 +147,14 @@ git push origin main      # Deploys to production (requires approval)
 ## Monitoring and Operations
 
 ### Health Checks
+
 ```bash
 # Check application health
 curl https://ml-visualizer-prod.azurewebsites.net/_stcore/health
 ```
 
 ### View Logs
+
 ```bash
 # Stream logs
 az webapp log tail --name ml-visualizer-prod \
@@ -157,6 +162,7 @@ az webapp log tail --name ml-visualizer-prod \
 ```
 
 ### Scaling
+
 ```bash
 # Manual scale
 az appservice plan update \
@@ -168,6 +174,7 @@ az appservice plan update \
 ## Configuration
 
 Environment-specific configuration files in `/config`:
+
 - `development.env` - Local development
 - `testing.env` - Testing environment
 - `staging.env` - Staging environment
@@ -180,6 +187,7 @@ See [config/README.md](config/README.md) for all available options.
 ### Workflows
 
 **ci.yml** - Runs on all pushes and pull requests
+
 - Multi-version Python testing (3.10, 3.11, 3.12)
 - Linting and code formatting checks
 - Security vulnerability scanning
@@ -187,17 +195,20 @@ See [config/README.md](config/README.md) for all available options.
 - Test execution with coverage reporting
 
 **deploy-testing.yml** - Deploys to testing environment
+
 - Triggered by push to `develop` branch
 - Builds and pushes Docker image to ACR
 - Deploys to Azure App Service
 - Runs health checks
 
 **deploy-staging.yml** - Deploys to staging environment
+
 - Triggered by push to `staging` branch
 - Includes smoke tests
 - Pre-production validation
 
 **deploy-production.yml** - Deploys to production
+
 - Triggered by push to `main` branch
 - Requires manual approval
 - Creates backup deployment slots
@@ -230,6 +241,7 @@ See [config/README.md](config/README.md) for all available options.
 Common issues and solutions are documented in [SETUP.md](SETUP.md#troubleshooting).
 
 Quick checks:
+
 ```bash
 # Check Azure resources
 az resource list --resource-group ml-visualizer-production-rg
