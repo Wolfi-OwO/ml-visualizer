@@ -240,7 +240,7 @@ unit-tests:
       echo "" >> test-report.txt
 
       # Run pytest with coverage (Cobertura XML + HTML + Term reports)
-      python -m pytest scr/tests/ -v --tb=short \
+      python -m pytest src/tests/ -v --tb=short \
         --cov=. \
         --cov-config=pyproject.toml \
         --cov-report=term-missing \
@@ -370,6 +370,102 @@ dependency-audit:
   environment:
     name: testing
     action: stop
+
+compute-semver:
+  stage: build
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      echo "compute-semver-advanced: Determining last tag for project $CI_PROJECT_ID"
+      TOKEN=""
+      if [ -n "$GITLAB_API_TOKEN" ]; then
+        TOKEN="$GITLAB_API_TOKEN"
+      else
+        TOKEN="$CI_JOB_TOKEN"
+      fi
+
+      if [ -z "$TOKEN" ]; then
+        echo "ERROR: No token available (GITLAB_API_TOKEN or CI_JOB_TOKEN)" >&2
+        exit 1
+      fi
+
+      API="$CI_API_V4_URL/projects/$CI_PROJECT_ID"
+
+      echo "Fetching tags via API..."
+      TAGS_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/tags?per_page=100") || true
+      LATEST_TAG=$(echo "$TAGS_JSON" | jq -r '.[0].name // empty')
+
+      if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+        echo "No tags found in repo — setting initial version 0.0.1"
+        NEW_VERSION="0.0.1"
+        echo "$NEW_VERSION" > VERSION
+        echo "APP_VERSION=$NEW_VERSION" > computed_version.env
+        echo "Computed version: $NEW_VERSION"
+        exit 0
+      fi
+
+      LATEST_TAG_STRIPPED=${LATEST_TAG#v}
+      echo "Latest tag: $LATEST_TAG (normalized: $LATEST_TAG_STRIPPED)"
+
+      TAG_COMMIT_SHA=$(echo "$TAGS_JSON" | jq -r '.[0].commit.id')
+      echo "Tag commit SHA: $TAG_COMMIT_SHA"
+
+      MR_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/commits/$TAG_COMMIT_SHA/merge_requests" || true)
+      MR_IID=$(echo "$MR_JSON" | jq -r '.[0].iid // empty')
+
+      if [ -z "$MR_IID" ]; then
+        echo "No merge request found for tag commit; defaulting to patch bump"
+        BUMP=patch
+      else
+        echo "Found MR IID: $MR_IID — fetching MR details"
+        MR_DETAILS=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/merge_requests/$MR_IID" || true)
+        LABELS=$(echo "$MR_DETAILS" | jq -r '.labels[]?') || true
+        echo "MR labels: $LABELS"
+
+        BUMP=patch
+        echo "$LABELS" | while read -r lbl; do
+          case "$(echo "$lbl" | tr '[:upper:]' '[:lower:]')" in
+            *major*|*breaking*) BUMP=major; break;;
+            *minor*|*feature*) BUMP=minor; break;;
+            *patch*|*bug*|*bugfix*|*fix*) BUMP=patch; break;;
+          esac
+        done
+      fi
+
+      IFS='.' read -r MAJOR MINOR PATCH <<EOF
+      ${LATEST_TAG_STRIPPED}
+      EOF
+      MAJOR=${MAJOR:-0}
+      MINOR=${MINOR:-0}
+      PATCH=${PATCH:-0}
+
+      case "$BUMP" in
+        major)
+          MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0;;
+        minor)
+          MINOR=$((MINOR + 1)); PATCH=0;;
+        *)
+          PATCH=$((PATCH + 1));;
+      esac
+
+      NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+      echo "Computed new version from tag/MR: $NEW_VERSION (bump=$BUMP)"
+      echo "$NEW_VERSION" > VERSION
+      echo "APP_VERSION=$NEW_VERSION" > computed_version.env
+    - |
+      echo "Version written: $(cat VERSION)"
+  artifacts:
+    when: always
+    paths:
+      - VERSION
+      - computed_version.env
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
+    - if: $CI_COMMIT_REF_NAME == "main"
 
 docker-build:
   stage: build
