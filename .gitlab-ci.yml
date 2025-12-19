@@ -208,7 +208,7 @@ syntax-check:
       echo "Syntax check results:" > syntax-report.txt
       python -m py_compile ./src/app.py
       echo "./src/app.py: OK" >> syntax-report.txt
-      for file in ./scr/pages/*.py; do
+      for file in ./src/pages/*.py; do
         python -m py_compile "$file"
         echo "$file: OK" >> syntax-report.txt
       done
