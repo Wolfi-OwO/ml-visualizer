@@ -52,7 +52,7 @@ check-variables:
       # For protected variables, we can only check on main/protected branches
       if [ "$CI_COMMIT_REF_NAME" = "main" ] || [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
         echo "Running on protected branch: $CI_COMMIT_REF_NAME"
-        for var in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_APP_SERVICE_PLAN AZURE_WEBAPP_NAME AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID; do
+        for var in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID AZURE_WEBAPP_NAME; do
           eval val=\$$var
           if [ -z "$val" ]; then
             echo "Error: Missing protected variable $var"
@@ -395,7 +395,9 @@ compute-semver:
 
       echo "Fetching tags via API..."
       TAGS_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/tags?per_page=100") || true
-      LATEST_TAG=$(echo "$TAGS_JSON" | jq -r '.[0].name // empty')
+
+      # Robustly extract latest tag name whether API returns an array or single object
+      LATEST_TAG=$(echo "$TAGS_JSON" | jq -r 'if type=="array" then (.[0].name // empty) elif type=="object" then (.name // empty) else empty end')
 
       if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
         echo "No tags found in repo — setting initial version 0.0.1"
@@ -409,11 +411,16 @@ compute-semver:
       LATEST_TAG_STRIPPED=${LATEST_TAG#v}
       echo "Latest tag: $LATEST_TAG (normalized: $LATEST_TAG_STRIPPED)"
 
-      TAG_COMMIT_SHA=$(echo "$TAGS_JSON" | jq -r '.[0].commit.id')
+      TAG_COMMIT_SHA=$(echo "$TAGS_JSON" | jq -r 'if type=="array" then (.[0].commit.id // empty) elif type=="object" then (.commit.id // empty) else empty end')
+      # If commit id not present in list endpoint, fetch tag by name
+      if [ -z "$TAG_COMMIT_SHA" ]; then
+        TAG_SINGLE_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/tags/$(echo "$LATEST_TAG" | sed 's/\//%2F/g')" || true)
+        TAG_COMMIT_SHA=$(echo "$TAG_SINGLE_JSON" | jq -r '.commit.id // empty')
+      fi
       echo "Tag commit SHA: $TAG_COMMIT_SHA"
 
       MR_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/commits/$TAG_COMMIT_SHA/merge_requests" || true)
-      MR_IID=$(echo "$MR_JSON" | jq -r '.[0].iid // empty')
+      MR_IID=$(echo "$MR_JSON" | jq -r 'if type=="array" then (.[0].iid // empty) elif type=="object" then (.iid // empty) else empty end')
 
       if [ -z "$MR_IID" ]; then
         echo "No merge request found for tag commit; defaulting to patch bump"
@@ -421,17 +428,14 @@ compute-semver:
       else
         echo "Found MR IID: $MR_IID — fetching MR details"
         MR_DETAILS=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/merge_requests/$MR_IID" || true)
-        LABELS=$(echo "$MR_DETAILS" | jq -r '.labels[]?') || true
-        echo "MR labels: $LABELS"
+        echo "MR raw labels: $(echo "$MR_DETAILS" | jq -r '.labels // [] | join(",")')"
 
-        BUMP=patch
-        echo "$LABELS" | while read -r lbl; do
-          case "$(echo "$lbl" | tr '[:upper:]' '[:lower:]')" in
-            *major*|*breaking*) BUMP=major; break;;
-            *minor*|*feature*) BUMP=minor; break;;
-            *patch*|*bug*|*bugfix*|*fix*) BUMP=patch; break;;
-          esac
-        done
+        # Decide bump by inspecting MR labels (case-insensitive)
+        BUMP=$(echo "$MR_DETAILS" | jq -r '(.labels[]? // empty) | ascii_downcase | if test("major|breaking") then "major" elif test("minor|feature") then "minor" elif test("patch|bug|bugfix|fix") then "patch" else empty end' | head -n1)
+        if [ -z "$BUMP" ]; then
+          BUMP=patch
+        fi
+        echo "Determined bump from MR labels: $BUMP"
       fi
 
       IFS='.' read -r MAJOR MINOR PATCH <<EOF
@@ -470,6 +474,9 @@ compute-semver:
 docker-build:
   stage: build
   image: docker:latest
+  needs:
+    - job: compute-semver
+      artifacts: true
   services:
     - docker:dind
   before_script:
@@ -656,31 +663,42 @@ deploy-staging:
       echo "Target: ${STAGING_WEBAPP_NAME}" >> staging-deployment-report.txt
       echo "Branch: $CI_COMMIT_REF_NAME" >> staging-deployment-report.txt
     - |
-      # Create staging web app if it doesn't exist
-      echo "Checking if staging web app exists..."
-      if ! az webapp show --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP &> /dev/null; then
-        echo "Creating new staging web app: ${STAGING_WEBAPP_NAME}"
-        az webapp create \
-          --resource-group $AZURE_RESOURCE_GROUP \
-          --plan $AZURE_APP_SERVICE_PLAN \
+      # Create or update a minimal Container App for staging
+      echo "Checking if staging container app exists..."
+      if ! az containerapp show --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP &> /dev/null; then
+        echo "Creating new staging container app: ${STAGING_WEBAPP_NAME}"
+        az containerapp create \
           --name ${STAGING_WEBAPP_NAME} \
-          --deployment-container-image-name $DOCKER_IMAGE_URI:$IMAGE_TAG >> staging-deployment-report.txt 2>&1
+          --resource-group $AZURE_RESOURCE_GROUP \
+          --environment $CONTAINERAPPS_ENV \
+          --image ${DOCKER_IMAGE_URI}:${IMAGE_TAG} \
+          --registry-server ${DOCKER_REGISTRY} \
+          --registry-username ${AZURE_CLIENT_ID} \
+          --registry-password ${AZURE_CLIENT_SECRET} \
+          --ingress external \
+          --target-port 8501 \
+          --min-replicas 0 \
+          --max-replicas 1 >> staging-deployment-report.txt 2>&1 || {
+          echo "Failed to create container app" >> staging-deployment-report.txt; exit 1; }
       else
-        echo "Staging web app already exists: ${STAGING_WEBAPP_NAME}"
+        echo "Staging container app already exists: ${STAGING_WEBAPP_NAME} — updating image"
+        az containerapp update \
+          --name ${STAGING_WEBAPP_NAME} \
+          --resource-group $AZURE_RESOURCE_GROUP \
+          --set template.containers[0].image="${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> staging-deployment-report.txt 2>&1 || true
+        # Restart/revision to pick up the new image
+        az containerapp revision restart --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP >> staging-deployment-report.txt 2>&1 || true
       fi
     - |
-      # Configure container for staging
-      echo "Configuring container for staging environment..."
-      az webapp config container set \
-        --name ${STAGING_WEBAPP_NAME} \
-        --resource-group $AZURE_RESOURCE_GROUP \
-        --container-image-name $DOCKER_IMAGE_URI:$IMAGE_TAG \
-        --container-registry-url https://$DOCKER_REGISTRY \
-        --container-registry-user $AZURE_CLIENT_ID \
-        --container-registry-password $AZURE_CLIENT_SECRET >> staging-deployment-report.txt 2>&1
-
-      az webapp restart --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP >> staging-deployment-report.txt 2>&1
-      sleep 60
+      # Retrieve the FQDN for the container app and wait for it to be available
+      STAGING_FQDN=$(az containerapp show --name ${STAGING_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || echo "")
+      if [ -z "$STAGING_FQDN" ]; then
+        echo "Could not determine container app FQDN; failing" >> staging-deployment-report.txt
+        exit 1
+      fi
+      echo "Container App FQDN: $STAGING_FQDN" >> staging-deployment-report.txt
+      echo "Waiting 30s for container app to warm up..." >> staging-deployment-report.txt
+      sleep 30
     - |
       # Health check for staging environment
       echo "Performing health checks on staging environment..."
