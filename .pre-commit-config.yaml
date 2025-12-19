@@ -1,4 +1,4 @@
-# Pre-commit hooks for DSAI ML Visualizer
+# Pre-commit hooks for DSAI Webapp
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
 

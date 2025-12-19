@@ -1,6 +1,6 @@
 # Environment Management Guide
 
-This document outlines the multi-environment deployment strategy for the ML Visualizer application.
+This document outlines the multi-environment deployment strategy for the DSAI Webapp application.
 
 ## Environment Architecture
 

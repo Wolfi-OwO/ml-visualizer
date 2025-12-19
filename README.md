@@ -1,4 +1,4 @@
-# ML Visualizer - Interactive Machine Learning Demonstrations
+# DSAI Webapp - Interactive Machine Learning Demonstrations
 
 A production-ready web application for visualizing machine learning algorithms including Gradient Descent, Perceptron, KNN, and Neural Networks. Built with Streamlit and deployed on Azure with complete CI/CD pipelines.
 

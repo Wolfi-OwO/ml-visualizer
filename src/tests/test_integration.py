@@ -1,5 +1,5 @@
 """
-Integration tests for the ML Visualizer application
+Integration tests for the DSAI Webapp application
 
 This module tests integration between different components and
 end-to-end workflows.

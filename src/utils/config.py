@@ -1,4 +1,4 @@
-"""Configuration management for the ML Visualizer application."""
+"""Configuration management for the DSAI Webapp application."""
 
 import os
 from pathlib import Path
@@ -12,6 +12,11 @@ def get_version() -> str:
     Returns:
         str: Application version string
     """
+    # Prefer an explicit build/runtime environment variable when available
+    env_ver = os.getenv("APP_VERSION")
+    if env_ver:
+        return env_ver
+
     try:
         # Check multiple locations for VERSION file
         possible_paths = [
@@ -24,9 +29,11 @@ def get_version() -> str:
             if version_path.exists():
                 return version_path.read_text().strip()
 
-        return "1.0.0"  # Default fallback
+        # Fallback to default version
+        return "1.0.0"
     except Exception:
-        return "1.0.0"  # Error fallback
+        # If anything goes wrong, return a sensible default
+        return "1.0.0"
 
 
 def get_config(key: str, default: Any = None) -> Any:

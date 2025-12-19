@@ -240,7 +240,7 @@ unit-tests:
       echo "" >> test-report.txt
 
       # Run pytest with coverage (Cobertura XML + HTML + Term reports)
-      python -m pytest tests/ -v --tb=short \
+      python -m pytest scr/tests/ -v --tb=short \
         --cov=. \
         --cov-config=pyproject.toml \
         --cov-report=term-missing \

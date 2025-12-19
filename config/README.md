@@ -1,6 +1,6 @@
 # Environment Configuration README
 
-This directory contains environment-specific configuration files for the ML Visualizer application.
+This directory contains environment-specific configuration files for the DSAI Webapp application.
 
 ## Available Environments
 

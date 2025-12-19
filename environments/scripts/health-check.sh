@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Health Check Script for ML Visualizer Environments
+# Health Check Script for DSAI Webapp Environments
 # Performs comprehensive health checks across all environments
 
 set -euo pipefail
@@ -28,7 +28,7 @@ usage() {
     cat << EOF
 Usage: $0 [OPTIONS] [ENVIRONMENT]
 
-Health check script for ML Visualizer environments.
+Health check script for DSAI Webapp environments.
 
 ENVIRONMENTS:
     testing     Check testing environment
@@ -257,7 +257,7 @@ check_application_health() {
     esac
 
     # Check main application response
-    if curl -s --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" | grep -q "ML Visualizer\|Streamlit\|Data Science" 2>/dev/null; then
+    if curl -s --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" | grep -q "DSAI Webapp\|Streamlit\|Data Science" 2>/dev/null; then
         log_success "$env environment: Application content verified"
     else
         log_warning "$env environment: Application content check failed"
@@ -309,7 +309,7 @@ check_environment() {
 main() {
     local overall_result=0
 
-    echo "ML Visualizer Environment Health Check"
+    echo "DSAI Webapp Environment Health Check"
     echo "=========================================="
 
     # Check prerequisites

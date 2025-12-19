@@ -105,7 +105,7 @@ fail_under = 0
 
 [tool.coverage.html]
 directory = "htmlcov"
-title = "DSAI ML Visualizer - Test Coverage Report"
+title = "DSAI DSAI Webapp - Test Coverage Report"
 
 [tool.coverage.xml]
 output = "coverage.xml"

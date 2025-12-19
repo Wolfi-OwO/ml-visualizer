@@ -1,4 +1,4 @@
-"""Main application entry point for the ML Visualizer."""
+"""Main application entry point for the DSAI Webapp."""
 
 import os
 import sys
@@ -13,7 +13,7 @@ from utils import get_config, get_version
 
 # --- CONFIG ---
 st.set_page_config(
-    page_title="ML Visualizer",
+    page_title="Datascience & Artifical Intelligence 5BHIF",
     page_icon="🤖",
     layout="centered",
     initial_sidebar_state="expanded",
@@ -27,16 +27,18 @@ ENVIRONMENT = get_config("ENVIRONMENT_NAME", "development")
 st.sidebar.title("Navigation")
 
 # Determine pages directory
-pages_dir = "pages" if os.path.exists("pages") else "src/pages"
+pages_dir = "pages"
+
 
 # Define pages
+homepage = st.Page(f"./{pages_dir}/homepage.py", title="Startseite")
 gradient_descent = st.Page(f"./{pages_dir}/gradient-descent.py", title="Gradient Descent")
 perceptron = st.Page(f"./{pages_dir}/perceptron.py", title="Perceptron")
 knn_visualizer = st.Page(f"./{pages_dir}/knn-visualize.py", title="KNN Visualizer")
 neuronal_net = st.Page(f"./{pages_dir}/neuronal-net.py", title="Neuronal Network")
 
-# Navigation
-pg = st.navigation([gradient_descent, perceptron, knn_visualizer, neuronal_net])
+# Navigation (homepage first)
+pg = st.navigation([homepage, gradient_descent, perceptron, knn_visualizer, neuronal_net])
 
 # Run the selected page
 pg.run()

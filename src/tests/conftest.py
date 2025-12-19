@@ -1,5 +1,5 @@
 """
-Test configuration for DSAI-5BHIF ML Visualizer
+Test configuration for DSAI-5BHIF DSAI Webapp
 
 This module contains pytest configuration and shared fixtures.
 """

@@ -1,4 +1,4 @@
-"""Health check utilities for the ML Visualizer application."""
+"""Health check utilities for the DSAI Webapp application."""
 
 import os
 import sys
