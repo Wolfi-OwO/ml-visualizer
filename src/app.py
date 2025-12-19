@@ -14,7 +14,6 @@ from utils import get_config, get_version
 # --- CONFIG ---
 st.set_page_config(
     page_title="Datascience & Artifical Intelligence 5BHIF",
-    page_icon="🤖",
     layout="centered",
     initial_sidebar_state="expanded",
 )
@@ -28,7 +27,6 @@ st.sidebar.title("Navigation")
 
 # Determine pages directory
 pages_dir = "pages"
-
 
 # Define pages
 homepage = st.Page(f"./{pages_dir}/homepage.py", title="Startseite")

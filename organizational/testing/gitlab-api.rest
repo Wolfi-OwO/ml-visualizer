@@ -1,0 +1,50 @@
+@SHA = 1
+
+### Get all pipelines with the state running
+
+GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+### Get all pipelines with the state running
+
+GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running&sha=
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+
+### Get all branches with the given name
+
+GET https://gitlab.com/api/v4/projects/76772967/repository/branches?search=2-defect-non-standard-streamlit-api-usage-in-app-py-st-page-st-navigation&merged=false
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+
+### Get merge-conflict with the given source_branch
+
+GET https://gitlab.com/api/v4/projects/76772967/merge_requests?source_branch=2-defect-non-standard-streamlit-api-usage-in-app-py-st-page-st-navigation&merged=false
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+### Get merge-conflict by id
+
+GET https://gitlab.com/api/v4/projects/76772967/merge_requests/1
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+-> head_pipeline:sha
+
+### Get pipeline by sha id from head_pipeline in merge
+GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running&sha=acc6e41f0faa2c4a05e59b7647e481db19d50b65
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+
+### Update the state of the pipeline
+POST https://gitlab.com/api/v4/projects/76772967/statuses/acc6e41f0faa2c4a05e59b7647e481db19d50b65?pipeline_id=2225372256
+PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+Content-Type: application/json
+
+{
+    "state": "success",
+    "name": "staging/mr-1",
+    "description": "Staging environment stopped — ready to merge"
+}
+
+# used docus:
+# https://docs.gitlab.com/api/merge_requests/
+# https://docs.gitlab.com/api/status_checks/
+# https://gitlab.com/gitlab-org/gitlab/-/issues/443254
