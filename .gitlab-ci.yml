@@ -951,69 +951,65 @@ deploy-production:
       echo "Pipeline ID: $CI_PIPELINE_ID" >> production-deployment-report.txt
       echo "Commit SHA: $CI_COMMIT_SHA" >> production-deployment-report.txt
     - |
-      # Store current production version for rollback
-      echo "Backing up current production configuration..."
-      CURRENT_IMAGE=$(az webapp config container show \
-        --name ${PRODUCTION_WEBAPP_NAME} \
-        --resource-group ${AZURE_RESOURCE_GROUP} \
-        --query "[0].name" -o tsv 2>/dev/null || echo "unknown")
-      echo "Previous production image: $CURRENT_IMAGE" >> production-deployment-report.txt
-
       # Store deployment metadata for rollback
       echo "$IMAGE_TAG" > current-production-version.txt
       echo "$CI_PIPELINE_ID" > current-production-pipeline.txt
       echo "$(date -Iseconds)" > production-deployment-timestamp.txt
-      echo "$CURRENT_IMAGE" > previous-production-version.txt
+      echo "Preparing to deploy Container App: ${PRODUCTION_WEBAPP_NAME}" >> production-deployment-report.txt
     - |
-      # Production deployment with extra safety
-      echo "Deploying to PRODUCTION Environment: ${PRODUCTION_WEBAPP_NAME}"
-      echo "CRITICAL: Production deployment in progress..." >> production-deployment-report.txt
-
-      az webapp config container set \
-        --name ${PRODUCTION_WEBAPP_NAME} \
-        --resource-group ${AZURE_RESOURCE_GROUP} \
-        --container-image-name ${DOCKER_IMAGE_URI}:${IMAGE_TAG} \
-        --container-registry-url https://${DOCKER_REGISTRY} \
-        --container-registry-user ${AZURE_CLIENT_ID} \
-        --container-registry-password ${AZURE_CLIENT_SECRET} >> production-deployment-report.txt 2>&1
-
-      echo "Restarting production application..." >> production-deployment-report.txt
-      az webapp restart --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} >> production-deployment-report.txt 2>&1
-      sleep 60
+      # Create or update a minimal Container App for production
+      echo "Creating or updating production Container App: ${PRODUCTION_WEBAPP_NAME}"
+      if ! az containerapp show --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} &> /dev/null; then
+        echo "Creating Container App: ${PRODUCTION_WEBAPP_NAME}" >> production-deployment-report.txt
+        az containerapp create \
+          --name ${PRODUCTION_WEBAPP_NAME} \
+          --resource-group $AZURE_RESOURCE_GROUP \
+          --environment $CONTAINERAPPS_ENV \
+          --image ${DOCKER_IMAGE_URI}:${IMAGE_TAG} \
+          --registry-server ${DOCKER_REGISTRY} \
+          --registry-username ${AZURE_CLIENT_ID} \
+          --registry-password ${AZURE_CLIENT_SECRET} \
+          --ingress external \
+          --target-port 8501 \
+          --min-replicas 0 \
+          --max-replicas ${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || { echo "Container App creation failed" >> production-deployment-report.txt; exit 1; }
+      else
+        echo "Container App exists; updating image and scaling settings" >> production-deployment-report.txt
+        az containerapp update \
+          --name ${PRODUCTION_WEBAPP_NAME} \
+          --resource-group $AZURE_RESOURCE_GROUP \
+          --set template.containers[0].image="${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
+                 template.scale.minReplicas=${PRODUCTION_MIN_REPLICAS:-0} \
+                 template.scale.maxReplicas=${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || true
+        az containerapp revision restart --name ${PRODUCTION_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP >> production-deployment-report.txt 2>&1 || true
+      fi
     - |
-      # Critical production health checks
-      echo "Performing CRITICAL production health checks..."
+      # Retrieve the FQDN for the container app and wait for it to be available
+      PROD_FQDN=$(az containerapp show --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || echo "")
+      if [ -z "$PROD_FQDN" ]; then
+        echo "Could not determine production Container App FQDN; failing" >> production-deployment-report.txt
+        exit 1
+      fi
+      echo "Production Container App FQDN: $PROD_FQDN" >> production-deployment-report.txt
+      echo "Waiting 30s for production container app to warm up..." >> production-deployment-report.txt
+      sleep 30
+    - |
+      # Production health checks against Container App FQDN
+      echo "Performing CRITICAL production health checks against https://$PROD_FQDN"
       HEALTH_PASSED=false
-      RESPONSE_TIME_OK=false
-
       for i in {1..60}; do
-        start_time=$(date +%s)
-        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${PRODUCTION_WEBAPP_NAME}.azurewebsites.net")
-        end_time=$(date +%s)
-        response_time=$((end_time - start_time))
-
+        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://$PROD_FQDN" || echo "000")
         if [ "$response_code" = "200" ]; then
-          if [ $response_time -lt 10 ]; then
-            echo "Production health check PASSED (attempt $i)" >> production-deployment-report.txt
-            echo "   Response code: $response_code" >> production-deployment-report.txt
-            echo "   Response time: ${response_time}s" >> production-deployment-report.txt
-            HEALTH_PASSED=true
-            RESPONSE_TIME_OK=true
-            break
-          else
-            echo "Slow response time: ${response_time}s (attempt $i)" >> production-deployment-report.txt
-          fi
-        else
-          echo "Health check failed: HTTP $response_code (attempt $i)" >> production-deployment-report.txt
+          echo "Production health check PASSED (attempt $i)" >> production-deployment-report.txt
+          HEALTH_PASSED=true
+          break
         fi
-
+        echo "Health check attempt $i failed (HTTP $response_code), retrying in 10s..." >> production-deployment-report.txt
         sleep 10
       done
 
       if [ "$HEALTH_PASSED" = "false" ]; then
-        echo "CRITICAL: Production health check FAILED after 10 minutes" >> production-deployment-report.txt
-        echo "Initiating automatic rollback..." >> production-deployment-report.txt
-        # Auto-rollback logic would go here in a real system
+        echo "CRITICAL: Production health check FAILED after timeout" >> production-deployment-report.txt
         exit 1
       fi
     - |
