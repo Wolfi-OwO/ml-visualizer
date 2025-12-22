@@ -15,8 +15,10 @@ def get_version() -> str:
     # Prefer an explicit build/runtime environment variable when available
     env_ver = os.getenv("APP_VERSION")
     if env_ver:
-        return env_ver
-
+        if env_ver.find(".") == -1:
+            return f"{env_ver} - Staging"
+        else:
+            return f"v{env_ver}"
     try:
         # Check multiple locations for VERSION file
         possible_paths = [
@@ -30,10 +32,10 @@ def get_version() -> str:
                 return version_path.read_text().strip()
 
         # Fallback to default version
-        return "1.0.0"
+        return "v1.0.0"
     except Exception:
         # If anything goes wrong, return a sensible default
-        return "1.0.0"
+        return "v1.0.0"
 
 
 def get_config(key: str, default: Any = None) -> Any:
