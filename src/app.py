@@ -7,6 +7,7 @@ import streamlit as st
 
 # Add src to Python path if running from root
 if os.path.exists("src"):
+    print("Setting path to /src")
     sys.path.insert(0, "src")
 
 from utils import get_config, get_version
