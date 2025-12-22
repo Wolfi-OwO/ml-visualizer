@@ -610,7 +610,7 @@ push-to-staging:
       MR_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$MR_API" || true)
 
       # Collect SHAs: CI_COMMIT_SHA, MR.sha, MR.merge_commit_sha, MR.head_sha
-      SHAS="${CI_COMMIT_SHA}"
+      SHAS=""
       MR_SHA=$(echo "$MR_JSON" | jq -r '.sha // empty')
       MERGE_COMMIT_SHA=$(echo "$MR_JSON" | jq -r '.merge_commit_sha // empty')
       HEAD_SHA=$(echo "$MR_JSON" | jq -r '.head_sha // empty')
@@ -621,7 +621,7 @@ push-to-staging:
 
       for s in "$MR_SHA" "$HEAD_SHA" "$MR_PIPELINE_SHA"; do
         if [ -n "$s" ] && [ "$s" != "null" ]; then
-          SHAS="$SHAS $s"
+          SHAS="$s"
         fi
       done
 
