@@ -16,10 +16,9 @@ Kurzbeschreibung (Titel):
 
 ## Akzeptanzkriterien
 
-- [ ] Kriterium 1 (funktionell)
-- [ ] Kriterium 2 (nicht-funktionell, z. B. Performance / Usability)
+- [ ] Code-Coverage > 80%
+- [ ] UI wurde getestet
 - [ ] Unit-Tests / Manual Tests dokumentiert
-- [ ] Dokumentation / README aktualisiert
 
 ## Zusätzliche Anmerkungen
 
