@@ -19,7 +19,13 @@ from utils.health import get_health_status, is_healthy
 
 def test_get_version_prefers_env(monkeypatch):
     monkeypatch.setenv("APP_VERSION", "2.3.4")
-    assert get_version() == "2.3.4"
+    assert get_version() == "v2.3.4"
+    monkeypatch.delenv("APP_VERSION", raising=False)
+
+
+def test_get_version_prefers_env_staging(monkeypatch):
+    monkeypatch.setenv("APP_VERSION", "Dl2829AX")
+    assert get_version() == "Dl2829AX - Staging"
     monkeypatch.delenv("APP_VERSION", raising=False)
 
 
