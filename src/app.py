@@ -45,7 +45,7 @@ pg.run()
 st.markdown("---")
 
 # Show environment in non-production
-footer_text = f"© 2025 Kofler Phillip HTL V - Informatik (v{APP_VERSION})"
+footer_text = f"© 2025 Kofler Phillip HTL V - Informatik ({APP_VERSION})"
 if ENVIRONMENT != "production":
     footer_text += f" - {ENVIRONMENT.upper()}"
 
