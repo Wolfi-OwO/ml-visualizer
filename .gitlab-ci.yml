@@ -745,12 +745,18 @@ deploy-staging:
           echo "Failed to create container app" >> staging-deployment-report.txt; exit 1; }
       else
         echo "Staging container app already exists: ${STAGING_WEBAPP_NAME} — updating image"
+        # Use the dedicated --image flag to update the container image (more robust
+        # than complex --set path quoting across shells). Then restart the latest
+        # revision by resolving its name.
         az containerapp update \
           --name ${STAGING_WEBAPP_NAME} \
           --resource-group $AZURE_RESOURCE_GROUP \
-          --set template.containers[0].image="${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> staging-deployment-report.txt 2>&1 || true
-        # Restart/revision to pick up the new image
-        az containerapp revision restart --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP >> staging-deployment-report.txt 2>&1 || true
+          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> staging-deployment-report.txt 2>&1 || true
+        # Find newest revision name and restart it (if available)
+        REVISION_NAME=$(az containerapp revision list --name ${STAGING_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query '[-1].name' -o tsv 2>/dev/null || echo "")
+        if [ -n "$REVISION_NAME" ]; then
+          az containerapp revision restart --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP --revision "$REVISION_NAME" >> staging-deployment-report.txt 2>&1 || true
+        fi
       fi
     - |
       # Retrieve the FQDN for the container app and wait for it to be available
@@ -1012,6 +1018,9 @@ cleanup-staging:
 deploy-production:
   stage: deploy:production
   image: mcr.microsoft.com/azure-cli:latest
+  needs:
+    - job: docker-build
+      artifacts: true
   rules:
     - if: $CI_COMMIT_REF_NAME == "main"
       when: manual
@@ -1067,13 +1076,18 @@ deploy-production:
           --max-replicas ${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || { echo "Container App creation failed" >> production-deployment-report.txt; exit 1; }
       else
         echo "Container App exists; updating image and scaling settings" >> production-deployment-report.txt
+        # Use --image to update the container image (avoids complex --set quoting issues)
         az containerapp update \
           --name ${PRODUCTION_WEBAPP_NAME} \
           --resource-group $AZURE_RESOURCE_GROUP \
-          --set template.containers[0].image="${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-                 template.scale.minReplicas=${PRODUCTION_MIN_REPLICAS:-0} \
+          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
+          --set template.scale.minReplicas=${PRODUCTION_MIN_REPLICAS:-0} \
                  template.scale.maxReplicas=${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || true
-        az containerapp revision restart --name ${PRODUCTION_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP >> production-deployment-report.txt 2>&1 || true
+        # Resolve newest revision name and restart it explicitly
+        REVISION_NAME=$(az containerapp revision list --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query '[-1].name' -o tsv 2>/dev/null || echo "")
+        if [ -n "$REVISION_NAME" ]; then
+          az containerapp revision restart --name ${PRODUCTION_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP --revision "$REVISION_NAME" >> production-deployment-report.txt 2>&1 || true
+        fi
       fi
     - |
       # Retrieve the FQDN for the container app and wait for it to be available
@@ -1151,6 +1165,7 @@ deploy-production:
       - current-production-pipeline.txt
       - production-deployment-timestamp.txt
       - previous-production-version.txt
+      - $VERSION_FILE
     expire_in: 6 months
   environment:
     name: production
