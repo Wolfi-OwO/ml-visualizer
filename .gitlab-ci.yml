@@ -619,7 +619,7 @@ push-to-staging:
       MR_PIPELINE_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/pipelines?per_page=1" || true)
       MR_PIPELINE_SHA=$(echo "$MR_PIPELINE_JSON" | jq -r '.[0].sha // empty')
 
-      for s in "$MR_SHA" "$MERGE_COMMIT_SHA" "$HEAD_SHA" "$MR_PIPELINE_SHA"; do
+      for s in "$MR_SHA" "$HEAD_SHA" "$MR_PIPELINE_SHA"; do
         if [ -n "$s" ] && [ "$s" != "null" ]; then
           SHAS="$SHAS $s"
         fi
