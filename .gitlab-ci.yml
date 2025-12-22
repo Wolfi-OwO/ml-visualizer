@@ -659,19 +659,14 @@ push-to-staging:
         echo "Warning: GITLAB_API_TOKEN not set - branch will not be protected"
         echo "Create a Project Access Token with 'api' scope and add as GITLAB_API_TOKEN variable"
       fi
-    - echo "Triggering pipeline on staging branch..."
+    - echo "(skipping automatic pipeline trigger for staging branch to avoid duplicate pipelines)"
     - |
-      if [ -n "$CI_TRIGGER_TOKEN" ]; then
-        curl --request POST \
-          --form "token=${CI_TRIGGER_TOKEN}" \
-          --form "ref=${STAGING_BRANCH}" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
-        echo "Pipeline triggered on staging branch"
-      else
-        echo "Warning: CI_TRIGGER_TOKEN not set. Please add a pipeline trigger token."
-        echo "Go to Settings -> CI/CD -> Pipeline trigger tokens -> Add new token"
-        echo "Then add CI_TRIGGER_TOKEN variable with the token value"
-      fi
+      # NOTE: Previously we triggered a separate pipeline for the newly-created
+      # staging branch using the project's trigger token. That caused duplicate
+      # pipelines (MR pipeline + staging-branch pipeline). To avoid confusion and
+      # duplicated deploys, we no longer trigger a pipeline here. If you want to
+      # manually run a pipeline for the staging branch, use the GitLab UI or add
+      # a manual trigger step.
     - |
       echo "Staging branch $STAGING_BRANCH" > staging-branch-info.txt
       echo "MR IID $CI_MERGE_REQUEST_IID" >> staging-branch-info.txt
