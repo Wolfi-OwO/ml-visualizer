@@ -164,43 +164,6 @@ ruff-check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME == "main"
 
-black-check:
-  stage: lint
-  image: python:3.10-slim
-  before_script:
-    - pip install --no-cache-dir black
-  script:
-    - |
-      echo "Checking code formatting with black..."
-      echo "=== Black Formatting Check ===" > black-results.txt
-      echo "Timestamp: $(date)" >> black-results.txt
-      echo "" >> black-results.txt
-
-      # Check formatting and capture diff
-      if black --check --diff . >> black-results.txt 2>&1; then
-        echo "Code is properly formatted" >> black-results.txt
-        echo "OK: Code formatting is correct"
-      else
-        echo "" >> black-results.txt
-        echo "Formatting issues found above. Run 'black .' to fix them." >> black-results.txt
-        echo "Tip: Install pre-commit hooks to auto-format on commit" >> black-results.txt
-
-        # Show the diff in job output too
-        echo "Code formatting issues detected:"
-        black --check --diff .
-        exit 1
-      fi
-  artifacts:
-    when: always
-    paths:
-      - black-results.txt
-    expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
-
 syntax-check:
   stage: test
   image: python:3.10-slim

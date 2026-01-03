@@ -1,34 +1,52 @@
 import time
 
-import matplotlib.pyplot as plt
+import altair as alt
 import numpy as np
+import pandas as pd
 import streamlit as st
 
-st.title("Perceptron Visualisierung")
+# --------------------------------------------------
+# Page Config
+# --------------------------------------------------
+st.set_page_config(
+    page_title="Perceptron Visualizer",
+    layout="wide",
+)
+
+st.title("Perceptron - Interaktive Lernvisualisierung")
 
 st.markdown(
     """
-    Hier siehst du ein einfaches neuronales Netzwerk (Perceptron), das lernt,
-    den AND-Operator zu erkennen.
-    Die Gewichte ändern sich bei jedem Trainingsschritt - sichtbar im Netzwerkdiagramm.
+    Ein **Perceptron** ist das einfachste neuronale Netzwerk.
+    Es lernt eine **lineare Entscheidungsgrenze**.
     """
-)  # Trainingsdaten
+)
+
+# --------------------------------------------------
+# Sidebar
+# --------------------------------------------------
+st.sidebar.header("Einstellungen")
+
+lr = st.sidebar.slider("Lernrate η", 0.01, 1.0, 0.3, 0.01)
+epochs = st.sidebar.slider("Epochen", 1, 20, 5)
+start = st.sidebar.button("▶ Training starten")
+
+# --------------------------------------------------
+# Data (AND)
+# --------------------------------------------------
 X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y = np.array([0, 0, 0, 1])
 
-# Sidebar-Parameter
-st.sidebar.subheader("Einstellungen - Perceptron")
-lr = st.sidebar.slider("Lernrate η", 0.01, 1.0, 0.3, 0.01)
-epochs = st.sidebar.slider("Epochen", 1, 20, 5)
-animate = st.sidebar.button("Training starten")
-
-# Initialisierung
+# --------------------------------------------------
+# Training
+# --------------------------------------------------
 np.random.seed(42)
 w = np.random.uniform(-1, 1, 2)
 b = np.random.uniform(-1, 1)
+
 history = [(w.copy(), b)]
 
-for _epoch in range(epochs):
+for _ in range(epochs):
     for i in range(len(X)):
         z = np.dot(X[i], w) + b
         y_hat = 1 if z > 0 else 0
@@ -37,88 +55,232 @@ for _epoch in range(epochs):
         b += lr * error
         history.append((w.copy(), b))
 
-placeholder = st.empty()
 
+# --------------------------------------------------
+# Plot function
+# --------------------------------------------------
+def plot_decision_boundary(weights, bias):
+    x_vals = np.linspace(-0.2, 1.2, 100)
+    y_vals = -(weights[0] * x_vals + bias) / weights[1]
 
-def draw_network(weights, bias, step):
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.axis("off")
+    df_line = pd.DataFrame({"x": x_vals, "y": y_vals})
 
-    input_pos = [(0, 1), (0, -1)]
-    neuron_pos = (2, 0)
-    output_pos = (4, 0)
+    df_points = pd.DataFrame(X, columns=["x", "y"])
+    df_points["class"] = y.astype(str)
 
-    # Inputs
-    for i, pos in enumerate(input_pos):
-        ax.scatter(*pos, s=1000, color="skyblue")
-        ax.text(pos[0], pos[1], f"x{i+1}", ha="center", va="center", fontsize=12)
-
-    # Neuron
-    ax.scatter(*neuron_pos, s=1200, color="lightgreen")
-    ax.text(neuron_pos[0], neuron_pos[1], "Neuron", ha="center", va="center", fontsize=11)
-
-    # Output
-    ax.scatter(*output_pos, s=1000, color="orange")
-    ax.text(output_pos[0], output_pos[1], "y", ha="center", va="center", fontsize=12)
-
-    # Connections
-    for i, pos in enumerate(input_pos):
-        color = "red" if weights[i] < 0 else "green"
-        ax.plot(
-            [pos[0], neuron_pos[0]],
-            [pos[1], neuron_pos[1]],
-            color=color,
-            lw=3,
-            alpha=0.8,
+    points = (
+        alt.Chart(df_points)
+        .mark_circle(size=200)
+        .encode(
+            x="x", y="y", color=alt.Color("class:N", scale=alt.Scale(range=["#ff7f0e", "#1f77b4"]))
         )
-        mid_x = (pos[0] + neuron_pos[0]) / 2
-        mid_y = (pos[1] + neuron_pos[1]) / 2
-        ax.text(mid_x, mid_y + 0.3, f"w{i+1}={weights[i]:.2f}", fontsize=10, color=color)
+    )
 
-    # Bias connection
-    ax.text(3, 0.4, f"Bias={bias:.2f}", color="purple", fontsize=10)
+    line = alt.Chart(df_line).mark_line(color="black").encode(x="x", y="y")
 
-    ax.set_title(f"Perceptron Netzwerk - Schritt {step}")
-    return fig
+    return (points + line).properties(width=600, height=400)
 
 
-if animate:
-    for step in range(len(history)):
-        w, b = history[step]
-        fig = draw_network(w, b, step)
-        placeholder.pyplot(fig)
+# --------------------------------------------------
+# Layout
+# --------------------------------------------------
+left, right = st.columns([1, 2])
+
+with right:
+    plot_placeholder = st.empty()
+
+with left:
+    state_box = st.empty()
+
+# --------------------------------------------------
+# Visualization
+# --------------------------------------------------
+if start:
+    for step, (w, b) in enumerate(history):
+        plot_placeholder.altair_chart(
+            plot_decision_boundary(w, b),
+            width="stretch",
+        )
+        state_box.info(f"Schritt {step}\n\nw₁={w[0]:.2f}\nw₂={w[1]:.2f}\nBias={b:.2f}")
         time.sleep(0.4)
 else:
-    step = st.slider("Manueller Schritt", 0, len(history) - 1, 0)
-    w, b = history[step]
-    fig = draw_network(w, b, step)
-    st.pyplot(fig)
+    plot_placeholder.altair_chart(
+        plot_decision_boundary(w, b),
+        width="stretch",
+    )
 
-st.info(f"Aktueller Zustand → w₁={w[0]:.2f}, w₂={w[1]:.2f}, Bias={b:.2f}")
+st.subheader("Anleitung")
+st.markdown(
+    """
+    1. **Lernrate (η) einstellen**
+    Die Lernrate bestimmt, **wie stark** das Perceptron seine Gewichte bei einem Fehler anpasst.
+    - Kleine Lernrate → langsames, aber stabiles Lernen
+    - Große Lernrate → schnelles, aber eventuell instabiles Lernen
 
-# Code Expander
-with st.expander("Code für Perceptron kopieren"):
-    perceptron_code = """
-import numpy as np
+    2. **Anzahl der Epochen wählen**
+    Eine Epoche bedeutet, dass **alle Trainingsdaten einmal durchlaufen werden**.
+    Mehr Epochen = mehr Lernschritte.
 
-X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-y = np.array([0, 0, 0, 1])
+    3. **„Training starten“ klicken**
+    Nach dem Klick beginnt das Perceptron zu lernen.
+    Du siehst Schritt für Schritt:
+    - wie sich die **Entscheidungsgrenze (Linie)** verschiebt
+    - wie sich die **Gewichte (w₁, w₂)** und der **Bias** verändern
 
-lr = 0.3
-epochs = 5
+    4. **Visualisierung verstehen**
+    - 🔵 Punkte → Klasse **1**
+    - 🟠 Punkte → Klasse **0**
+    - ⚫ Linie → aktuelle Entscheidungsgrenze des Perceptrons
 
-np.random.seed(42)
-w = np.random.uniform(-1, 1, 2)
-b = np.random.uniform(-1, 1)
+    Ziel des Trainings ist es, die Linie so zu verschieben,
+    dass **nur der Punkt (1,1)** als **1** klassifiziert wird
+    (AND-Operator).
 
-for epoch in range(epochs):
-    for i in range(len(X)):
-        z = np.dot(X[i], w) + b
-        y_hat = 1 if z > 0 else 0
-        error = y[i] - y_hat
-        w += lr * error * X[i]
-        b += lr * error
+    **Tipp:**
+    Probiere verschiedene Lernraten und Epochen aus,
+    um zu sehen, wie sich das Lernverhalten verändert.
 
-print("Finale Gewichte:", w, "Bias:", b)
-"""
-    st.code(perceptron_code, language="python")
+    """
+)
+
+# --------------------------------------------------
+# Explanation
+# --------------------------------------------------
+with st.expander("Erklärung zum Perceptron"):
+    # --------------------------------------------------
+    # THEORY - WHAT IS A PERCEPTRON
+    # --------------------------------------------------
+    st.markdown("---")
+    st.markdown("## Was ist ein Perceptron?")
+
+    st.markdown(
+        """
+        Ein **Perceptron** ist das **einfachste neuronale Netzwerk** und auch der kleinste Baustein von einem.
+        Es besteht aus:
+
+        - mehreren Eingaben (x₁, x₂, …)
+        - zugehörigen Gewichten (w₁, w₂, …)
+        - einem Bias (b)
+        - einer Aktivierungsfunktion
+        """
+    )
+
+    st.markdown("### Mathematisches Modell")
+
+    st.latex(r"z = w_1 x_1 + w_2 x_2 + b")
+
+    st.markdown(
+        """
+        Die Ausgabe erfolgt über eine **Schwellwertfunktion**:
+        """
+    )
+
+    st.latex(
+        r"""
+        \hat{y} =
+        \begin{cases}
+        1 & \text{wenn } z > 0 \\
+        0 & \text{sonst}
+        \end{cases}
+        """
+    )
+
+    # --------------------------------------------------
+    # LEARNING
+    # --------------------------------------------------
+    st.markdown("---")
+    st.markdown("## Wie lernt ein Perceptron?")
+
+    st.markdown(
+        """
+        Das Perceptron lernt **durch Fehlerkorrektur** - einen iterativen Prozess,
+        bei dem Fehler schrittweise minimiert werden.
+
+        ### Der Lernprozess im Detail:
+
+        1. **Initialisierung** - Gewichte und Bias werden zufällig gesetzt
+        2. **Vorhersage berechnen** - Für jeden Trainingspunkt wird z = w·x + b berechnet
+        3. **Fehler bestimmen** - Differenz zwischen erwartetem und vorhergesagtem Wert
+        4. **Gewichte anpassen** - Korrektur basierend auf dem Fehler
+        5. **Wiederholen** - Bis alle Punkte korrekt klassifiziert sind (oder Epochen-Limit erreicht)
+        """
+    )
+
+    st.markdown("### Fehlerberechnung")
+
+    st.latex(r"error = y - \hat{y}")
+
+    st.markdown(
+        """
+        **Mögliche Fehler:**
+        - error = +1 → Punkt sollte 1 sein, war aber 0 ⇒ Gewichte erhöhen
+        - error = -1 → Punkt sollte 0 sein, war aber 1 ⇒ Gewichte verringern
+        - error = 0 → Korrekte Vorhersage ⇒ keine Änderung
+        """
+    )
+
+    st.markdown("### Update-Regeln (Perceptron-Lernregel)")
+
+    st.latex(r"w = w + \eta \cdot error \cdot x")
+    st.latex(r"b = b + \eta \cdot error")
+
+    st.markdown(
+        """
+        ### Die Rolle der Lernrate η
+
+        - **η = 0.1** → Kleine Schritte, stabiles aber langsames Lernen
+        - **η = 0.5** → Moderate Schritte, guter Kompromiss
+        - **η = 1.0** → Große Schritte, schnell aber potenziell instabil
+
+        **Beispiel:** Bei error = 1, x = 0.5, η = 0.3:
+        - w_neu = w_alt + 0.3 × 1 × 0.5 = w_alt + 0.15
+        """
+    )
+
+    # --------------------------------------------------
+    # LIMITATIONS
+    # --------------------------------------------------
+    st.markdown("---")
+    st.markdown("## Einschränkungen & Anwendungen")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### ❌ Limitierungen")
+        st.markdown(
+            """
+            **Linear trennbare Probleme:**
+            - Kann nur Probleme lösen, die durch eine **gerade Linie** (2D) oder
+              **Hyperebene** (n-D) trennbar sind
+
+            **Beispiele nicht lösbarer Probleme:**
+            - **XOR** (Exclusive OR)
+            - Kreisförmige Klassengrenzen
+            - Verschachtelte Cluster
+
+            **Warum?**
+            - Ein einzelnes Perceptron kann nur **eine** Entscheidungsgrenze erzeugen
+            - Komplexere Probleme benötigen **mehrere Schichten** (Multi-Layer Networks)
+            """
+        )
+
+    with col2:
+        st.markdown("### ✅ Praktische Anwendungen")
+        st.markdown(
+            """
+            **Wo Perceptrons gut funktionieren:**
+            - **Binäre Klassifikation** (2 Klassen)
+            - **Sentiment-Analyse** (positiv/negativ)
+            - **Spam-Filter** (Spam/Ham)
+            - **Medizinische Diagnose** (krank/gesund)
+
+            **Historische Bedeutung:**
+            - 1957 von Frank Rosenblatt entwickelt
+            - Grundstein für moderne neuronale Netze
+            - Einfach, aber fundamental wichtig
+
+            **Modernes Relevanz:**
+            - Baustein in tiefen Netzen
+            - Verständnisgrundlage für Backpropagation
+            """
+        )

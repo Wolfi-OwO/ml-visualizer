@@ -66,6 +66,7 @@ COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
 COPY --chown=appuser:appuser VERSION ./VERSION
 COPY --chown=appuser:appuser src/pages ./src/pages
 COPY --chown=appuser:appuser src/tests ./src/tests
+COPY --chown=appuser:appuser src/styles ./src/styles
 COPY --chown=appuser:appuser src/utils ./src/utils
 COPY --chown=appuser:appuser src/app.py ./src/app.py
 

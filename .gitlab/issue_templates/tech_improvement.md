@@ -27,4 +27,4 @@ Kurzbeschreibung (Titel):
 - Performance-/Sicherheits-Checks
 - Integrationstests erfolgreich
 
-/label ~Technical-Improvement
+/label ~technical-improvement
