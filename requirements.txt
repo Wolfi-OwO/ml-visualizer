@@ -1,12 +1,13 @@
 # Streamlit webapi
 streamlit
+streamlit-on-Hover-tabs
+streamlit-drawable-canvas
 
 # statistics and ml
 numpy
 matplotlib
 pandas
 altair
-streamlit-drawable-canvas
 plotly
 
 # Development dependencies

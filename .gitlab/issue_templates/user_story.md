@@ -29,4 +29,4 @@ Kurzbeschreibung (Titel):
 
 - Story Points / Zeitaufwand
 
-/label ~User-Story
+/label ~user-story

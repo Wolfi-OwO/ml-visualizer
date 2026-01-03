@@ -414,7 +414,7 @@ with col1:
     # render chart, möglicherweise Auto-Play mit Updates
     placeholder = st.empty()
     fig = build_network_figure()
-    placeholder.plotly_chart(fig, use_container_width=True)
+    placeholder.plotly_chart(fig, width="stretch")
 
     # Step description
     step_texts = {
@@ -606,7 +606,7 @@ with col1:
             )
 
     df = pd.DataFrame(truth_data)
-    st.dataframe(df, use_container_width=True)
+    st.dataframe(df, width="stretch")
 
 with col2:
     st.write("**Expected (Binary AND):**")
@@ -615,12 +615,238 @@ with col2:
         for j in [0, 1]:
             expected_data.append({"Input 1": i, "Input 2": j, "Output": i & j})
     df_expected = pd.DataFrame(expected_data)
-    st.dataframe(df_expected, use_container_width=True)
+    st.dataframe(df_expected, width="stretch")
 
 st.divider()
 
-st.write("**Aktivierungsfunktion:**")
+st.subheader("Aktivierungsfunktion")
 st.latex(r"\sigma(x) = \frac{1}{1 + e^{-x}}")
 st.write(
     "Das Output Neuron leuchtet intensiv auf (orange), wenn es aktiviert ist (>0.5), und dunkel (blau), wenn es inaktiv ist (<0.3)."
 )
+
+
+st.subheader("Anleitung")
+st.markdown(
+    """
+    - Schritt 1: Inputs setzen
+    Wähle links in der Sidebar:
+    - **Input 1**
+    - **Input 2**
+
+    Beide Inputs sind binär (0 oder 1), genau wie bei der AND-Logik.
+
+    - Schritt 2: Simulation Schritt für Schritt
+    Mit dem **Simulation-Schieberegler** kannst du durch die Berechnung gehen:
+
+    | Schritt |              Bedeutung                    |
+    |---------|-------------------------------------------|
+    |    0    | Inputs werden gesetzt                     |
+    |    1    | Beiträge Input → Hidden (Gewicht x Input) |
+    |    2    | Aktivierung der Hidden-Neuronen           |
+    |    3    | Beiträge Hidden → Output                  |
+    |    4    | Finaler Output                            |
+
+    Die **gelben Markierungen** zeigen immer,
+    welcher Teil des Netzwerks gerade aktiv ist.
+
+    - Schritt 3: Gewichte untersuchen
+    Rechts kannst du:
+    - einzelne **Neuronen**
+    - oder **Verbindungen (Gewichte)**
+
+    auswählen und siehst:
+    - mathematische Formeln
+    - konkrete Zahlen
+    - den Beitrag zum Gesamtergebnis
+    """
+)
+
+# --------------------------------------------------
+# Explanation
+# --------------------------------------------------
+with st.expander("Erklärung - Neuronales Netz", expanded=False):
+    st.markdown("---")
+    st.markdown("## Was ist ein neuronales Netz?")
+
+    st.markdown(
+        """
+        Ein neuronales Netz ist ein **mathematisches Modell**, das lose
+        an das menschliche Gehirn angelehnt ist.
+
+        Es besteht aus:
+        - **Neuronen** (Recheneinheiten)
+        - **Gewichten** (Einflussstärke)
+        - **Bias** (Verschiebung)
+        - **Aktivierungsfunktionen**
+
+        Jedes Neuron berechnet:
+        """
+    )
+
+    st.latex(r"z = \sum w_i x_i + b")
+    st.latex(r"\text{Output} = \sigma(z)")
+
+    st.markdown(
+        """
+        Die Aktivierungsfunktion (hier **Sigmoid**) sorgt dafür,
+        dass der Output zwischen **0 und 1** liegt.
+        """
+    )
+
+    st.markdown("---")
+    st.markdown("## Warum ein Hidden Layer für AND?")
+
+    st.markdown(
+        """
+        Theoretisch kann AND auch mit **einem einzelnen Perceptron**
+        gelöst werden.
+
+        **Warum dann ein Hidden Layer?**
+
+        Diese Seite ist didaktisch aufgebaut, um:
+        - echte neuronale Netze zu zeigen
+        - spätere Erweiterungen (z.B. XOR) zu ermöglichen
+        - den Datenfluss besser sichtbar zu machen
+
+        Der Hidden Layer zeigt:
+        - wie Zwischenrepräsentationen entstehen
+        - wie mehrere Neuronen gemeinsam entscheiden
+        """
+    )
+
+    st.markdown("---")
+    st.markdown("## Farben & Linien verstehen")
+
+    st.markdown(
+        """
+        ### Neuronenfarben
+        Die Farbe eines Neurons zeigt seine **Aktivierung**:
+
+        - 🔵 **Blau** → kaum aktiv (≈ 0)
+        - 🟣 **Violett** → mittel aktiv
+        - 🟠 **Orange** → stark aktiv (≈ 1)
+
+        ---
+        ### Verbindungen (Gewichte)
+        - 🟢 **Grün** → positives Gewicht
+        - 🔴 **Rot** → negatives Gewicht
+        - **Linienstärke** → Einflussstärke
+
+        In bestimmten Simulationsschritten werden zusätzlich
+        die **Beiträge (Gewicht × Aktivierung)** angezeigt.
+        """
+    )
+
+    st.markdown("---")
+    st.markdown("## Output & Entscheidung")
+
+    st.markdown(
+        """
+        Das Output-Neuron berechnet einen Wert zwischen **0 und 1**.
+
+        **Entscheidungsregel:**
+        - Output > 0.5 → **1** (TRUE)
+        - Output ≤ 0.5 → **0** (FALSE)
+
+        Das entspricht exakt der **AND-Wahrheitstabelle**,
+        die unten auf der Seite angezeigt wird.
+        """
+    )
+
+    st.markdown("---")
+    st.markdown("## Wie lernt das Netz? (Training)")
+
+    st.markdown(
+        """
+        Diese Visualisierung zeigt ein **bereits trainiertes** Netz.
+        Aber wie kommt man zu diesen perfekten Gewichten?
+
+        ### Training mit Backpropagation
+
+        1. **Forward Pass** - Eingabe durch das Netz propagieren
+        2. **Fehler berechnen** - Differenz zwischen Output und Zielwert
+        3. **Backward Pass** - Fehler rückwärts durch das Netz propagieren
+        4. **Gewichte anpassen** - Mit Gradient Descent optimieren
+        5. **Wiederholen** - Bis Fehler minimal ist
+
+        **Loss-Funktion (für binäre Klassifikation):**
+        """
+    )
+    st.latex(r"L = -\sum [y \log(\hat{y}) + (1-y) \log(1-\hat{y})]")
+
+    st.markdown(
+        """
+        Diese **Binary Cross-Entropy** Loss-Funktion misst,
+        wie gut die Vorhersagen mit den tatsächlichen Werten übereinstimmen.
+        """
+    )
+
+    st.markdown("---")
+    st.markdown("## Praktische Tipps")
+
+    tip_col1, tip_col2 = st.columns(2)
+
+    with tip_col1:
+        st.markdown("### 💡 Experimentieren")
+        st.markdown(
+            """
+            **Mit manuellen Gewichten:**
+            - Aktiviere "Gewichte manuell anpassen"
+            - Verändere einzelne Gewichte
+            - Beobachte die Auswirkung auf den Output
+
+            **Fragen zum Testen:**
+            - Was passiert bei allen Gewichten = 0?
+            - Welche Gewichte sind am wichtigsten?
+            - Kann man Hidden Layer weglassen?
+            """
+        )
+
+    with tip_col2:
+        st.markdown("### 🎯 Verständniskontrolle")
+        st.markdown(
+            """
+            **Teste dein Verständnis:**
+            - Warum brauchen wir einen Hidden Layer?
+            - Was macht die Sigmoid-Funktion?
+            - Warum sind die Bias-Werte negativ?
+
+            **Experiment:**
+            - Setze alle Hidden-Bias auf 0
+            - Was passiert mit der AND-Operation?
+            """
+        )
+
+    st.markdown("---")
+    st.markdown("## Von AND zu komplexeren Problemen")
+
+    st.markdown(
+        """
+        ### Warum ist AND so einfach?
+        AND ist **linear trennbar** - ein einzelnes Perceptron würde genügen.
+        Der Hidden Layer zeigt aber das **Prinzip** für komplexere Probleme.
+
+        ### XOR - Der nächste Schritt
+        **XOR** (Exclusive OR) ist **nicht linear trennbar**:
+        - (0,0) → 0
+        - (0,1) → 1
+        - (1,0) → 1
+        - (1,1) → 0
+
+        Ein einlagiges Netz **kann XOR nicht lösen**!
+        Mit einem Hidden Layer wird es möglich - genau wie hier gezeigt.
+
+        ### Real-World Applications
+        Moderne neuronale Netze nutzen dasselbe Prinzip, nur mit:
+        - **Hunderten von Layern** (Deep Learning)
+        - **Tausenden von Neuronen** pro Layer
+        - **Millionen von Parametern**
+
+        Anwendungen:
+        - Bilderkennung (CNNs)
+        - Sprachverarbeitung (RNNs, Transformers)
+        - Autonomes Fahren
+        - Medizinische Diagnose
+        """
+    )

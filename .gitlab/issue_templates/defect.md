@@ -41,4 +41,4 @@ Kurzbeschreibung (Titel):
 - [ ] Dokumentation aktualisiert (falls nötig)
 - [ ] Deployment auf Testumgebung erfolgreich
 
-/label ~Defect
+/label ~defect

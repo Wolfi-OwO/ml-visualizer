@@ -23,4 +23,4 @@ Kurzbeschreibung (Titel):
 - Markdown / ReadTheDocs korrekt gerendert
 - Beispiel-Command zum Testen dokumentiert
 
-/label ~Documentation
+/label ~documentation
