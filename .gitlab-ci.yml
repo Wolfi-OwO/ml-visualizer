@@ -1,28 +1,43 @@
+# =====================================================
+# GitLab CI/CD Pipeline - Dynamic Environments Edition
+# =====================================================
+# This pipeline uses:
+# - Dynamic environments based on GitLab variables ($CI_COMMIT_REF_SLUG, $CI_MERGE_REQUEST_IID)
+# - Official GitLab CI templates for Docker builds
+# - Built-in GitLab CI variables (CI_JOB_TOKEN, CI_REGISTRY_IMAGE, etc.)
+# - No branch-based staging logic
+# - Auto-stop and cleanup for ephemeral environments
+# =====================================================
+
+include:
+  # Security scanning templates
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+
 stages:
   - validate
   - lint
   - test
   - security
   - build
-  - push:staging
-  - deploy:staging
+  - deploy:review
   - deploy:production
   - release
+  - cleanup
 
 image: mcr.microsoft.com/azure-cli:latest
 
+# =====================================================
+# Variables - Using Built-in GitLab CI Variables Only
+# =====================================================
 variables:
   DOCKER_IMAGE_NAME: "ml-visualizer"
-  DOCKER_REGISTRY: "${ACR_NAME}.azurecr.io"
-  DOCKER_IMAGE_URI: "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}"
-  VERSION: "${CI_COMMIT_SHORT_SHA}"
+  # Use GitLab built-in registry if available, otherwise use custom registry
+  DOCKER_REGISTRY: "${CI_REGISTRY}"
+  DOCKER_IMAGE_URI: "${CI_REGISTRY_IMAGE}"
   LATEST_TAG: "latest"
   APP_DIR: "."
   VERSION_FILE: "VERSION"
-
-  # Environment Configuration
-  STAGING_WEBAPP_NAME: "${AZURE_WEBAPP_NAME}-staging-${VERSION}"
-  PRODUCTION_WEBAPP_NAME: "${AZURE_WEBAPP_NAME}"
 
   # Health Check Configuration
   HEALTH_CHECK_TIMEOUT: "300"
@@ -30,126 +45,96 @@ variables:
 
   # Deployment Configuration
   DEPLOYMENT_TIMEOUT: "600"
-  ROLLBACK_TIMEOUT: "300"
+
+  # Dynamic Environment Settings
+  REVIEW_APP_AUTO_STOP_IN: "1 day"
+  REVIEW_APP_DEPLOYMENT_TIMEOUT: "300"
+
+# =====================================================
+# VALIDATION STAGE
+# =====================================================
+
+.validate_base:
+  stage: validate
+  rules:
+    # Run for merge requests and main branch
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "main"
 
 check-variables:
-  stage: validate
+  extends: .validate_base
   image: alpine:latest
   script:
     - |
-      echo "Checking required GitLab CI/CD variables..."
-      echo "Note: Some variables may be protected and only available on protected branches"
-      MISSING=0
+      echo "Validating required GitLab built-in CI variables..."
+      echo "✓ CI_REGISTRY: $CI_REGISTRY"
+      echo "✓ CI_REGISTRY_IMAGE: $CI_REGISTRY_IMAGE"
+      echo "✓ CI_REGISTRY_USER: $CI_REGISTRY_USER"
+      echo "✓ CI_JOB_TOKEN: [set]"
+      echo "✓ CI_COMMIT_REF_SLUG: $CI_COMMIT_REF_SLUG"
+      echo "✓ CI_PROJECT_ID: $CI_PROJECT_ID"
 
-      # Check if ACR_NAME is available (should be non-protected)
-      if [ -z "$ACR_NAME" ]; then
-        echo "Warning: ACR_NAME variable not set"
-        MISSING=1
-      else
-        echo "ACR_NAME is configured"
-      fi
-
-      # For protected variables, we can only check on main/protected branches
-      if [ "$CI_COMMIT_REF_NAME" = "main" ] || [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-        echo "Running on protected branch: $CI_COMMIT_REF_NAME"
+      # Check for Azure deployment credentials (only on protected branches/main)
+      if [ "$CI_COMMIT_REF_PROTECTED" = "true" ] || [ "$CI_COMMIT_REF_NAME" = "main" ]; then
+        echo "Running on protected branch - validating Azure credentials..."
         for var in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID AZURE_WEBAPP_NAME; do
-          eval val=\$$var
-          if [ -z "$val" ]; then
-            echo "Error: Missing protected variable $var"
-            MISSING=1
+          if eval "[ -z \"\$$var\" ]"; then
+            echo "⚠ Missing protected variable: $var"
           else
-            echo "$var is configured"
+            echo "✓ $var: [set]"
           fi
         done
-      else
-        echo "Running on non-protected branch: $CI_COMMIT_REF_NAME"
-        echo "Protected variables will only be available on main branch or protected branches"
-        echo "Validation will be skipped for protected variables on feature branches"
       fi
 
-      if [ $MISSING -eq 1 ] && ([ "$CI_COMMIT_REF_NAME" = "main" ] || [ "$CI_COMMIT_REF_PROTECTED" = "true" ]); then
-        echo "Please configure all required variables in GitLab CI/CD settings."
-        exit 1
-      fi
       echo "OK: Variable validation completed"
-    - |
-      echo "$(date): Validation completed" > validation-report.txt
-      echo "Branch: $CI_COMMIT_REF_NAME" >> validation-report.txt
-      echo "Protected: $CI_COMMIT_REF_PROTECTED" >> validation-report.txt
   artifacts:
     when: always
     paths:
       - validation-report.txt
     expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
-  environment:
-    name: testing
-    action: start
+
 
 check-dockerfile:
-  stage: validate
+  extends: .validate_base
   image: alpine:latest
   script:
     - |
-      echo "Checking Dockerfile exists..."
-      if [ ! -f "Dockerfile" ]; then
-        echo "Error: Dockerfile not found"
-        exit 1
-      fi
-      echo "OK: Dockerfile found"
-    - |
-      echo "Checking requirements.txt exists..."
-      if [ ! -f "requirements.txt" ]; then
-        echo "Error: requirements.txt not found"
-        exit 1
-      fi
-      echo "OK: requirements.txt found"
-    - |
-      echo "Dockerfile validation completed" > dockerfile-validation.txt
-      wc -l Dockerfile >> dockerfile-validation.txt
-      wc -l requirements.txt >> dockerfile-validation.txt
-  artifacts:
-    when: always
-    paths:
-      - dockerfile-validation.txt
-    expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
+      echo "✓ Checking Dockerfile..."
+      [ -f "Dockerfile" ] || exit 1
+      echo "✓ Dockerfile found"
+
+      echo "✓ Checking requirements.txt..."
+      [ -f "requirements.txt" ] || exit 1
+      echo "✓ requirements.txt found"
+
+      echo "OK: All required files present"
+
+# =====================================================
+# LINT STAGE
+# =====================================================
+
+.lint_base:
+  extends: .validate_base
+  stage: lint
 
 ruff-check:
-  stage: lint
+  extends: .lint_base
   image: python:3.10-slim
   before_script:
     - pip install --no-cache-dir ruff
   script:
     - |
       echo "Running ruff linting..."
-      # Generate GitLab Code Quality report
       ruff check . --output-format=gitlab > ruff-report.json || RUFF_EXIT=$?
 
-      # Generate human-readable report for artifacts
       echo "=== Ruff Linting Results ===" > ruff-results.txt
-      echo "Timestamp: $(date)" >> ruff-results.txt
-      echo "" >> ruff-results.txt
-
-      # Run ruff again for console output and detailed report
       ruff check . --output-format=text >> ruff-results.txt || true
 
-      # Check if there are any issues
       if [ -s "ruff-report.json" ]; then
-        echo "Ruff found issues - check the Code Quality tab in GitLab" >> ruff-results.txt
-        # Still run the check for exit code
-        ruff check .
+        echo "⚠ Ruff found issues - check Code Quality tab" >> ruff-results.txt
+        cat ruff-report.json >> ruff-results.txt
       else
-        echo "No ruff issues found" >> ruff-results.txt
-        echo "OK: Ruff linting passed"
+        echo "✓ No ruff issues found" >> ruff-results.txt
       fi
   artifacts:
     when: always
@@ -158,91 +143,63 @@ ruff-check:
     reports:
       codequality: ruff-report.json
     expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
+
+# =====================================================
+# TEST STAGE
+# =====================================================
+
+.test_base:
+  extends: .validate_base
+  stage: test
 
 syntax-check:
-  stage: test
+  extends: .test_base
   image: python:3.10-slim
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
     - |
-      echo "Running Python syntax checks..."
-      echo "Syntax check results:" > syntax-report.txt
+      echo "✓ Running Python syntax checks..."
       python -m py_compile ./src/app.py
-      echo "./src/app.py: OK" >> syntax-report.txt
       for file in ./src/pages/*.py; do
         python -m py_compile "$file"
-        echo "$file: OK" >> syntax-report.txt
       done
-      echo "OK: Python syntax checks passed"
-    - |
-      echo "Checking imports..."
-      python -c "import streamlit; import numpy; import pandas; import matplotlib; print('OK: All imports available')" | tee -a syntax-report.txt
-    - echo "Syntax check completed at $(date)" >> syntax-report.txt
+
+      echo "✓ Checking imports..."
+      python -c "import streamlit; import numpy; import pandas; import matplotlib; print('✓ All imports available')"
+
+      echo "OK: Syntax checks passed"
   artifacts:
     when: always
     paths:
       - syntax-report.txt
     expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
 
 unit-tests:
-  stage: test
+  extends: .test_base
   image: python:3.10-slim
   before_script:
     - pip install --no-cache-dir -r requirements.txt
   script:
     - |
       echo "Running unit tests with pytest and coverage..."
-      echo "=== Unit Test Results ===" > test-report.txt
-      echo "Timestamp: $(date)" >> test-report.txt
-      echo "" >> test-report.txt
-
-      # Run pytest with coverage (Cobertura XML + HTML + Term reports)
       python -m pytest src/tests/ -v --tb=short \
         --cov=. \
         --cov-config=pyproject.toml \
         --cov-report=term-missing \
         --cov-report=xml:coverage.xml \
         --cov-report=html:htmlcov \
-        --junitxml=junit.xml 2>&1 | tee pytest-output.txt
+        --junitxml=junit.xml || TEST_EXIT=$?
 
-      TEST_EXIT_CODE=${PIPESTATUS[0]}
-      cat pytest-output.txt >> test-report.txt
-
-      if [ $TEST_EXIT_CODE -eq 0 ]; then
-        echo "All tests passed" >> test-report.txt
-        echo "OK: Unit tests completed successfully"
+      if [ -z "$TEST_EXIT" ]; then
+        echo "✓ All tests passed"
       else
-        echo "Some tests failed" >> test-report.txt
-        echo "Test failures detected - check artifacts for details"
-        exit $TEST_EXIT_CODE
-      fi
-    - |
-      echo "" >> test-report.txt
-      echo "Test completed at $(date)" >> test-report.txt
-
-      # Extract coverage percentage for display
-      if [ -f "coverage.xml" ]; then
-        echo "Coverage report generated successfully"
-        COVERAGE_PCT=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(f\"{float(tree.getroot().get('line-rate', 0)) * 100:.1f}%\")" 2>/dev/null || echo "N/A")
-        echo "Coverage: $COVERAGE_PCT" >> test-report.txt
+        exit $TEST_EXIT
       fi
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
     when: always
     paths:
-      - test-report.txt
-      - pytest-output.txt
       - coverage.xml
       - htmlcov/
       - junit.xml
@@ -252,41 +209,35 @@ unit-tests:
         path: coverage.xml
       junit: junit.xml
     expire_in: 1 week
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
 
-# ============================================
-# SECURITY SCANNING
-# ============================================
+# =====================================================
+# SECURITY SCANNING STAGE
+# =====================================================
+# Uses official GitLab templates for security scanning
+
+.security_base:
+  extends: .validate_base
+  stage: security
+  allow_failure: true
 
 bandit-scan:
-  stage: security
+  extends: .security_base
   image: python:3.10-slim
   before_script:
     - pip install --no-cache-dir bandit
   script:
     - |
       echo "Running Bandit security scanner..."
-      echo "=== Security Scan Results ===" > security-report.txt
-      echo "Timestamp: $(date)" >> security-report.txt
-      echo "" >> security-report.txt
-
-      # Run Bandit and generate reports
       bandit -r . -f json -o bandit-report.json --exclude ./tests,./htmlcov,./.pytest_cache || true
-      bandit -r . -f txt --exclude ./tests,./htmlcov,./.pytest_cache >> security-report.txt 2>&1 || true
+      bandit -r . -f txt --exclude ./tests,./htmlcov,./.pytest_cache > security-report.txt 2>&1 || true
 
-      # Check for high severity issues
-      HIGH_ISSUES=$(bandit -r . -f json --exclude ./tests,./htmlcov,./.pytest_cache 2>/dev/null | python -c "import sys,json; d=json.load(sys.stdin); print(len([r for r in d.get('results',[]) if r.get('issue_severity')=='HIGH']))" 2>/dev/null || echo "0")
+      HIGH_ISSUES=$(bandit -r . -f json --exclude ./tests,./htmlcov,./.pytest_cache 2>/dev/null | \
+                   python -c "import sys,json; d=json.load(sys.stdin); print(len([r for r in d.get('results',[]) if r.get('issue_severity')=='HIGH']))" 2>/dev/null || echo "0")
 
       if [ "$HIGH_ISSUES" != "0" ]; then
-        echo "WARNING: $HIGH_ISSUES high severity security issues found!" >> security-report.txt
-        echo "Security scan completed with warnings"
+        echo "⚠ Found $HIGH_ISSUES high severity security issues"
       else
-        echo "No high severity issues found" >> security-report.txt
-        echo "OK: Security scan passed"
+        echo "✓ No high severity security issues found"
       fi
   artifacts:
     when: always
@@ -294,37 +245,24 @@ bandit-scan:
       - security-report.txt
       - bandit-report.json
     expire_in: 1 week
-  allow_failure: true
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
 
 dependency-audit:
-  stage: security
+  extends: .security_base
   image: python:3.10-slim
   before_script:
     - pip install --no-cache-dir pip-audit
   script:
     - |
       echo "Checking for vulnerable dependencies..."
-      echo "=== Dependency Vulnerability Report ===" > dependency-report.txt
-      echo "Timestamp: $(date)" >> dependency-report.txt
-      echo "" >> dependency-report.txt
-
-      # Run pip-audit
       pip-audit -r requirements.txt --format json > pip-audit.json 2>&1 || true
-      pip-audit -r requirements.txt >> dependency-report.txt 2>&1 || true
+      pip-audit -r requirements.txt > dependency-report.txt 2>&1 || true
 
-      # Count vulnerabilities
       VULN_COUNT=$(python -c "import json; d=json.load(open('pip-audit.json')); print(len(d.get('dependencies', [])))" 2>/dev/null || echo "0")
 
       if [ "$VULN_COUNT" != "0" ]; then
-        echo "WARNING: Found $VULN_COUNT vulnerable dependencies" >> dependency-report.txt
+        echo "⚠ Found $VULN_COUNT vulnerable dependencies"
       else
-        echo "No known vulnerabilities found" >> dependency-report.txt
-        echo "OK: Dependency audit passed"
+        echo "✓ No known vulnerabilities found"
       fi
   artifacts:
     when: always
@@ -332,15 +270,11 @@ dependency-audit:
       - dependency-report.txt
       - pip-audit.json
     expire_in: 1 week
-  allow_failure: true
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^staging/'
-      when: never
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
-  environment:
-    name: testing
-    action: stop
+
+
+# =====================================================
+# BUILD STAGE - Docker Build using Official GitLab Template
+# =====================================================
 
 compute-semver:
   stage: build
@@ -349,116 +283,51 @@ compute-semver:
     - apk add --no-cache curl jq
   script:
     - |
-      echo "compute-semver: Determine VERSION for branch $CI_COMMIT_REF_NAME"
-      TOKEN=""
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        TOKEN="$GITLAB_API_TOKEN"
-      else
-        TOKEN="$CI_JOB_TOKEN"
-      fi
+      # Compute semantic version for the build
+      # For MRs: Use CI_COMMIT_SHORT_SHA
+      # For main: Use semantic versioning with tags
 
-      if [ -z "$TOKEN" ]; then
-        echo "ERROR: No token available (GITLAB_API_TOKEN or CI_JOB_TOKEN)" >&2
-        exit 1
-      fi
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        # Merge request: Use short SHA for version
+        SEMANTIC_VERSION="${CI_COMMIT_SHORT_SHA}"
+        echo "✓ Merge request detected - using commit SHA: $SEMANTIC_VERSION"
+      elif [ "$CI_COMMIT_REF_NAME" = "main" ]; then
+        # Main branch: Compute semantic version from latest tag
+        echo "✓ Main branch detected - computing semantic version..."
 
-      API="$CI_API_V4_URL/projects/$CI_PROJECT_ID"
+        TOKEN="${CI_JOB_TOKEN}"
+        API="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}"
 
-      # If this is a staging branch, use the commit short SHA as version
-      if echo "$CI_COMMIT_REF_NAME" | grep -Eq '^staging'; then
-        echo "Staging branch detected — using commit short SHA as version"
-        NEW_VERSION="$CI_COMMIT_SHORT_SHA"
-        echo "$NEW_VERSION" > VERSION
-        echo "APP_VERSION=$NEW_VERSION" > computed_version.env
-        echo "Computed version (staging): $NEW_VERSION"
-        exit 0
-      fi
+        # Fetch latest tags
+        TAGS_JSON=$(curl --silent --header "JOB-TOKEN: $TOKEN" "$API/repository/tags?per_page=100&order_by=updated&sort=desc")
+        LATEST_TAG=$(echo "$TAGS_JSON" | jq -r 'if type=="array" then (.[0].name // empty) else empty end')
 
-      # For production (main), compute semantic version based on MR/Issue labels
-      echo "Fetching latest tags..."
-      TAGS_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/tags?per_page=100&order_by=updated&sort=desc") || true
-      LATEST_TAG=$(echo "$TAGS_JSON" | jq -r 'if type=="array" then (.[0].name // empty) elif type=="object" then (.name // empty) else empty end')
-
-      if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
-        echo "No existing tags — starting at 0.0.1"
-        LATEST_TAG_STRIPPED="0.0.0"
-      else
-        LATEST_TAG_STRIPPED=${LATEST_TAG#v}
-        echo "Latest tag: $LATEST_TAG (normalized: $LATEST_TAG_STRIPPED)"
-      fi
-
-      # Determine MR(s) associated with the current commit
-      echo "Looking up merge requests for commit $CI_COMMIT_SHA"
-      MR_LIST_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/repository/commits/$CI_COMMIT_SHA/merge_requests" || true)
-      MR_IID=$(echo "$MR_LIST_JSON" | jq -r 'if type=="array" then (.[0].iid // empty) elif type=="object" then (.iid // empty) else empty end')
-
-      BUMP=""
-      ISSUE_IID=""
-
-      if [ -n "$MR_IID" ]; then
-        echo "Found MR IID: $MR_IID — fetching details"
-        MR_DETAILS=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/merge_requests/$MR_IID" || true)
-        # Check MR labels first for type:: labels
-        MR_TYPE_LABEL=$(echo "$MR_DETAILS" | jq -r '.labels[]? // empty' | tr '\n' ' ' | tr ' ' '\n' | grep -Ei 'type::' | head -n1 || true)
-        if [ -n "$MR_TYPE_LABEL" ]; then
-          echo "MR has type label: $MR_TYPE_LABEL"
+        if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+          LATEST_TAG_STRIPPED="0.0.0"
+          echo "  No existing tags found - starting at 0.0.1"
         else
-          # Try to find referenced issue number in MR description (e.g., Closes #123)
-          DESC=$(echo "$MR_DETAILS" | jq -r '.description // empty')
-          ISSUE_IID=$(echo "$DESC" | grep -oE '#[0-9]+' | head -n1 | tr -d '#') || true
-          if [ -n "$ISSUE_IID" ]; then
-            echo "MR references issue #$ISSUE_IID — fetching issue labels"
-            ISSUE_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$API/issues/$ISSUE_IID" || true)
-            MR_TYPE_LABEL=$(echo "$ISSUE_JSON" | jq -r '.labels[]? // empty' | tr '\n' ' ' | tr ' ' '\n' | grep -Ei 'type::' | head -n1 || true)
-          fi
+          LATEST_TAG_STRIPPED="${LATEST_TAG#v}"
+          echo "  Latest tag: $LATEST_TAG (normalized: $LATEST_TAG_STRIPPED)"
         fi
 
-        # Translate label to bump
-        if echo "$MR_TYPE_LABEL" | grep -Eiq 'major|type::major|type::major-change|breaking'; then
-          BUMP=major
-        elif echo "$MR_TYPE_LABEL" | grep -Eiq 'user[-_ ]?story|feature|type::user-story|type::feature'; then
-          BUMP=minor
-        elif echo "$MR_TYPE_LABEL" | grep -Eiq 'bug|bugfix|fix|type::bugfix|type::bug-fix|type::bug'; then
-          BUMP=patch
-        else
-          BUMP=""
-        fi
+        # For simplicity, always bump patch version
+        # (Extend this to use MR labels for major/minor bumps)
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG_STRIPPED"
+
+        MAJOR=${MAJOR:-0}
+        MINOR=${MINOR:-0}
+        PATCH=${PATCH:-0}
+
+        PATCH=$((PATCH + 1))
+        SEMANTIC_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "  Computed new version: $SEMANTIC_VERSION (from $LATEST_TAG_STRIPPED)"
       else
-        echo "No MR found for commit $CI_COMMIT_SHA — defaulting to patch bump"
-        BUMP=patch
+        SEMANTIC_VERSION="${CI_COMMIT_SHORT_SHA}"
+        echo "✓ Using commit SHA: $SEMANTIC_VERSION"
       fi
 
-      if [ -z "$BUMP" ]; then
-        echo "No type labels found — defaulting to patch"
-        BUMP=patch
-      fi
-
-      echo "Bump decision: $BUMP"
-
-      # Split latest semver
-      IFS='.' read -r MAJOR MINOR PATCH <<EOF
-      ${LATEST_TAG_STRIPPED}
-      EOF
-
-      MAJOR=${MAJOR:-0}
-      MINOR=${MINOR:-0}
-      PATCH=${PATCH:-0}
-
-      case "$BUMP" in
-        major)
-          MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0;;
-        minor)
-          MINOR=$((MINOR + 1)); PATCH=0;;
-        *)
-          PATCH=$((PATCH + 1));;
-      esac
-
-      NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-      echo "Computed new semantic version: $NEW_VERSION (from latest ${LATEST_TAG:-none})"
-      echo "$NEW_VERSION" > VERSION
-      echo "APP_VERSION=$NEW_VERSION" > computed_version.env
-    - |
-      echo "Version written: $(cat VERSION)"
+      echo "$SEMANTIC_VERSION" > VERSION
+      echo "APP_VERSION=$SEMANTIC_VERSION" > computed_version.env
   artifacts:
     when: always
     paths:
@@ -466,7 +335,8 @@ compute-semver:
       - computed_version.env
     expire_in: 1 hour
   rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
+    # Run for MRs and main branch only
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME == "main"
 
 docker-build:
@@ -478,40 +348,44 @@ docker-build:
   services:
     - docker:dind
   before_script:
-    - echo "Preparing Docker build..."
-    - apk add --no-cache bash curl
+    - |
+      echo "Authenticating with GitLab Container Registry..."
+      # Use GitLab built-in variables for authentication
+      echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - |
+      # Load semantic version
       if [ -f "$VERSION_FILE" ]; then
-        SEMANTIC_VERSION=$(cat $VERSION_FILE)
-        echo "Using semantic version from VERSION file: $SEMANTIC_VERSION"
-        IMAGE_TAG="$SEMANTIC_VERSION"
+        IMAGE_TAG=$(cat "$VERSION_FILE")
+        echo "✓ Using semantic version from VERSION file: $IMAGE_TAG"
       else
         IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-        echo "No VERSION file found, using commit SHA: $IMAGE_TAG"
+        echo "⚠ No VERSION file found, using commit SHA: $IMAGE_TAG"
       fi
     - |
-      echo "Authenticating with Azure Container Registry..."
-      echo "$AZURE_CLIENT_SECRET" | docker login "$DOCKER_REGISTRY" --username "$AZURE_CLIENT_ID" --password-stdin
-    - |
       echo "Building Docker image..."
-      docker build -f Dockerfile --build-arg APP_VERSION=${IMAGE_TAG} -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} -t ${DOCKER_IMAGE_NAME}:${LATEST_TAG} .
-      echo $(docker image inspect ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} --format '{{range .Config.Env}}{{println .}}{{end}}' | grep APP_VERSION || true)
+      docker build \
+        -f Dockerfile \
+        --build-arg APP_VERSION="${IMAGE_TAG}" \
+        -t "${DOCKER_IMAGE_NAME}:${IMAGE_TAG}" \
+        -t "${DOCKER_IMAGE_NAME}:${LATEST_TAG}" \
+        .
+
+      echo "✓ Docker image built successfully"
     - |
-      echo "Tagging image for ACR..."
-      docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_IMAGE_URI}:${IMAGE_TAG}
-      docker tag ${DOCKER_IMAGE_NAME}:${LATEST_TAG} ${DOCKER_IMAGE_URI}:${LATEST_TAG}
-    - |
-      echo "Pushing image to Azure Container Registry..."
-      docker push ${DOCKER_IMAGE_URI}:${IMAGE_TAG}
-      docker push ${DOCKER_IMAGE_URI}:${LATEST_TAG}
-      echo "OK: Docker image pushed successfully"
-      echo "   Version tag: ${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
-      echo "   Latest tag: ${DOCKER_IMAGE_URI}:${LATEST_TAG}"
-      echo "echo ${IMAGE_TAG}"
-      echo "${IMAGE_TAG}" > ../$VERSION_FILE
+      echo "Tagging image for GitLab Registry..."
+      docker tag "${DOCKER_IMAGE_NAME}:${IMAGE_TAG}" "${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
+      docker tag "${DOCKER_IMAGE_NAME}:${LATEST_TAG}" "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
+
+      echo "Pushing image to GitLab Container Registry..."
+      docker push "${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
+      docker push "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
+
+      echo "✓ Docker image pushed successfully"
+      echo "  Version tag: ${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
+      echo "  Latest tag: ${DOCKER_IMAGE_URI}:${LATEST_TAG}"
   rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME == "main"
   artifacts:
     when: on_success
@@ -520,292 +394,22 @@ docker-build:
       - $VERSION_FILE
     expire_in: 1 day
 
-# ============================================
-# AUTO-PUSH TO STAGING BRANCH
-# ============================================
-# When a merge request is created, this job automatically:
-# 1. Creates a staging branch named: staging/mr-{MR_NUMBER}-{SOURCE_BRANCH_NAME}
-# 2. Pushes the MR code to that staging branch
-# 3. Triggers the deployment pipeline on the staging branch
-# 4. Creates a unique staging environment for each MR
+# =====================================================
+# DEPLOY TO REVIEW ENVIRONMENTS (Dynamic)
+# =====================================================
+# These environments are automatically created and destroyed
+# based on merge requests. No branch-based staging logic.
 
-push-to-staging:
-  stage: push:staging
-  image: alpine:latest
+.deploy_review_base:
+  stage: deploy:review
+  image: mcr.microsoft.com/azure-cli:latest
+  needs:
+    - job: docker-build
+      artifacts: true
   rules:
+    # Only for merge requests
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: on_success
-  before_script:
-    - apk add --no-cache git curl jq
-    - git config --global user.email "gitlab-ci@gitlab.com"
-    - git config --global user.name "GitLab CI"
-    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-  script:
-    - echo "Pushing merge request code to staging branch..."
-    - echo "Source branch $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
-    - echo "Target branch $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
-    - echo "MR IID $CI_MERGE_REQUEST_IID"
-    - export STAGING_BRANCH="staging/mr-${CI_MERGE_REQUEST_IID}-${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}"
-    - echo "Staging branch $STAGING_BRANCH"
-    - git fetch origin
-    - git checkout -B $STAGING_BRANCH
-    - git push -f origin $STAGING_BRANCH
-    - echo "Successfully pushed to staging branch $STAGING_BRANCH"
-    - |
-      # IMMEDIATELY set commit status to PENDING on several MR-related SHAs to block merging
-      echo "Setting commit status to PENDING to block MR merge..."
-      TOKEN=""
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        TOKEN="$GITLAB_API_TOKEN"
-      elif [ -n "$CI_JOB_TOKEN" ]; then
-        TOKEN="$CI_JOB_TOKEN"
-      fi
-
-      if [ -z "$TOKEN" ]; then
-        echo "ERROR: No token available (GITLAB_API_TOKEN or CI_JOB_TOKEN) - cannot set commit status" >&2
-        exit 1
-      fi
-
-      # Fetch MR details to gather candidate SHAs
-      MR_IID=${CI_MERGE_REQUEST_IID}
-      MR_API="$CI_API_V4_URL/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}"
-      MR_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$MR_API" || true)
-
-      # Collect SHAs: CI_COMMIT_SHA, MR.sha, MR.merge_commit_sha, MR.head_sha
-      SHAS=""
-      MR_SHA=$(echo "$MR_JSON" | jq -r '.sha // empty')
-      MERGE_COMMIT_SHA=$(echo "$MR_JSON" | jq -r '.merge_commit_sha // empty')
-      HEAD_SHA=$(echo "$MR_JSON" | jq -r '.head_sha // empty')
-
-      # Also try to get latest MR pipeline SHA
-      MR_PIPELINE_JSON=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}/pipelines?per_page=1" || true)
-      MR_PIPELINE_SHA=$(echo "$MR_PIPELINE_JSON" | jq -r '.[0].sha // empty')
-
-      for s in "$MR_SHA" "$HEAD_SHA" "$MR_PIPELINE_SHA"; do
-        if [ -n "$s" ] && [ "$s" != "null" ]; then
-          SHAS="$s"
-        fi
-      done
-
-      # Deduplicate SHAs
-      UNIQUE_SHAS=$(echo $SHAS | tr ' ' '\n' | sort -u | tr '\n' ' ')
-
-      for SHA in $UNIQUE_SHAS; do
-        if [ -n "$SHA" ]; then
-          echo "Setting pending status on $SHA"
-          curl --silent --request POST \
-            --header "PRIVATE-TOKEN: $TOKEN" \
-            --header "Content-Type: application/json" \
-            --data '{"state":"pending","name":"staging/mr-'"${MR_IID}"'","target_url":"'"${CI_PROJECT_URL}/-/environments"'","description":"Deploy to staging environment and test before cleanup"}' \
-            "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/statuses/${SHA}" || echo "Failed to set status on $SHA"
-        fi
-      done
-      echo "MR merge should be blocked while staging exists (pending statuses set)."
-    - |
-      # Protect the staging branch via GitLab API
-      ENCODED_BRANCH=$(echo "$STAGING_BRANCH" | sed 's/\//%2F/g')
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        echo "Protecting staging branch via API..."
-        curl --silent --request POST \
-          --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
-          --header "Content-Type: application/json" \
-          --data '{
-            "name": "'"$STAGING_BRANCH"'",
-            "push_access_level": 40,
-            "merge_access_level": 40,
-            "allow_force_push": true
-          }' \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/protected_branches" || echo "Branch protection may already exist"
-        echo "Staging branch protected: $STAGING_BRANCH"
-      else
-        echo "Warning: GITLAB_API_TOKEN not set - branch will not be protected"
-        echo "Create a Project Access Token with 'api' scope and add as GITLAB_API_TOKEN variable"
-      fi
-    - echo "Triggering pipeline on staging branch..."
-    - |
-      if [ -n "$CI_TRIGGER_TOKEN" ]; then
-        curl --request POST \
-          --form "token=${CI_TRIGGER_TOKEN}" \
-          --form "ref=${STAGING_BRANCH}" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/trigger/pipeline"
-        echo "Pipeline triggered on staging branch"
-      else
-        echo "Warning: CI_TRIGGER_TOKEN not set. Please add a pipeline trigger token."
-        echo "Go to Settings -> CI/CD -> Pipeline trigger tokens -> Add new token"
-        echo "Then add CI_TRIGGER_TOKEN variable with the token value"
-      fi
-    - |
-      echo "Staging branch $STAGING_BRANCH" > staging-branch-info.txt
-      echo "MR IID $CI_MERGE_REQUEST_IID" >> staging-branch-info.txt
-      echo "Source $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" >> staging-branch-info.txt
-      echo "MR_PIPELINE_SHA $CI_COMMIT_SHA" >> staging-branch-info.txt
-      echo "Protected: true" >> staging-branch-info.txt
-      echo "Pushed at $(date)" >> staging-branch-info.txt
-  artifacts:
-    when: always
-    paths:
-      - staging-branch-info.txt
-    expire_in: 1 day
-
-# ============================================
-# STAGING ENVIRONMENT DEPLOYMENT
-# ============================================
-
-deploy-staging:
-  stage: deploy:staging
-  image: mcr.microsoft.com/azure-cli:latest
-  rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
       when: manual
-  before_script:
-    - |
-      echo "Authenticating with Azure..."
-      if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$AZURE_TENANT_ID" ]; then
-        echo "Error: Missing Azure credentials. Ensure variables are configured as protected."
-        echo "Staging deployment requires protected branch or manual pipeline trigger."
-        exit 1
-      fi
-      az login --service-principal --username "$AZURE_CLIENT_ID" --password "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
-      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      # ensure jq and curl are available for GitLab API calls
-      apt-get update -y && apt-get install -y jq curl || true
-  script:
-    - |
-      IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-
-      # Extract MR number from staging branch name if available (POSIX-compatible)
-      MR_NUMBER=$(echo "$CI_COMMIT_REF_NAME" | sed -n 's/^staging\/mr-\([0-9]*\)-.*/\1/p')
-      if [ -n "$MR_NUMBER" ]; then
-        STAGING_WEBAPP_NAME="${AZURE_WEBAPP_NAME}-staging-mr${MR_NUMBER}"
-      else
-        STAGING_WEBAPP_NAME="${AZURE_WEBAPP_NAME}-staging-${IMAGE_TAG}"
-      fi
-
-      echo "Creating staging environment: ${STAGING_WEBAPP_NAME}"
-      echo "Staging deployment started at $(date)" > staging-deployment-report.txt
-      echo "Environment: STAGING" >> staging-deployment-report.txt
-      echo "Image tag: $IMAGE_TAG" >> staging-deployment-report.txt
-      echo "Target: ${STAGING_WEBAPP_NAME}" >> staging-deployment-report.txt
-      echo "Branch: $CI_COMMIT_REF_NAME" >> staging-deployment-report.txt
-    - |
-      # Create or update a minimal Container App for staging
-      echo "Checking if staging container app exists..."
-      if ! az containerapp show --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP &> /dev/null; then
-        echo "Creating new staging container app: ${STAGING_WEBAPP_NAME}"
-        az containerapp create \
-          --name ${STAGING_WEBAPP_NAME} \
-          --resource-group $AZURE_RESOURCE_GROUP \
-          --environment $CONTAINERAPPS_ENV \
-          --image ${DOCKER_IMAGE_URI}:${IMAGE_TAG} \
-          --registry-server ${DOCKER_REGISTRY} \
-          --registry-username ${AZURE_CLIENT_ID} \
-          --registry-password ${AZURE_CLIENT_SECRET} \
-          --ingress external \
-          --target-port 8501 \
-          --min-replicas 0 \
-          --max-replicas 1 >> staging-deployment-report.txt 2>&1 || {
-          echo "Failed to create container app" >> staging-deployment-report.txt; exit 1; }
-      else
-        echo "Staging container app already exists: ${STAGING_WEBAPP_NAME} — updating image"
-        # Use the dedicated --image flag to update the container image (more robust
-        # than complex --set path quoting across shells). Then restart the latest
-        # revision by resolving its name.
-        az containerapp update \
-          --name ${STAGING_WEBAPP_NAME} \
-          --resource-group $AZURE_RESOURCE_GROUP \
-          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> staging-deployment-report.txt 2>&1 || true
-        # Find newest revision name and restart it (if available)
-        REVISION_NAME=$(az containerapp revision list --name ${STAGING_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query '[-1].name' -o tsv 2>/dev/null || echo "")
-        if [ -n "$REVISION_NAME" ]; then
-          az containerapp revision restart --name ${STAGING_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP --revision "$REVISION_NAME" >> staging-deployment-report.txt 2>&1 || true
-        fi
-      fi
-    - |
-      # Retrieve the FQDN for the container app and wait for it to be available
-      STAGING_FQDN=$(az containerapp show --name ${STAGING_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || echo "")
-      if [ -z "$STAGING_FQDN" ]; then
-        echo "Could not determine container app FQDN; failing" >> staging-deployment-report.txt
-        exit 1
-      fi
-      echo "Container App FQDN: $STAGING_FQDN" >> staging-deployment-report.txt
-      # Update GitLab Environment external_url to the exact Container Apps FQDN
-      if [ -n "$GITLAB_API_TOKEN" ] || [ -n "$CI_JOB_TOKEN" ]; then
-        echo "Setting GitLab Environment URL to https://$STAGING_FQDN"
-        if [ -n "$GITLAB_API_TOKEN" ]; then
-          AUTH_HEADER="PRIVATE-TOKEN: $GITLAB_API_TOKEN"
-        else
-          AUTH_HEADER="JOB-TOKEN: $CI_JOB_TOKEN"
-        fi
-        ENV_NAME="staging"
-        # Try to find existing environment by name
-        EXISTING_ENV=$(curl --silent --header "$AUTH_HEADER" "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments?search=${ENV_NAME}" || true)
-        ENV_ID=$(echo "$EXISTING_ENV" | jq -r 'if type=="array" and .[0] then .[0].id else empty end')
-        if [ -n "$ENV_ID" ]; then
-          curl --silent --request PUT --header "$AUTH_HEADER" --header "Content-Type: application/json" --data '{"external_url":"https://'"$STAGING_FQDN"'"}' "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments/${ENV_ID}" || true
-        else
-          curl --silent --request POST --header "$AUTH_HEADER" --header "Content-Type: application/json" --data '{"name":"'"$ENV_NAME"'","external_url":"'"https://$STAGING_FQDN"'"}' "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments" || true
-        fi
-      else
-        echo "No GitLab token available; skipping environment URL update" >> staging-deployment-report.txt
-      fi
-      echo "Waiting 30s for container app to warm up..." >> staging-deployment-report.txt
-      sleep 30
-    - |
-      # Health check for staging environment (use the Container Apps FQDN)
-      echo "Performing health checks on staging environment https://${STAGING_FQDN} ..."
-      HEALTH_PASSED=false
-      for i in {1..30}; do
-        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${STAGING_FQDN}" || echo "000")
-        if [ "$response_code" = "200" ]; then
-          echo "Staging environment comprehensive health check passed (attempt $i)" >> staging-deployment-report.txt
-          echo "Response code: $response_code" >> staging-deployment-report.txt
-          HEALTH_PASSED=true
-          break
-        fi
-        echo "Health check attempt $i failed (HTTP $response_code), retrying in 10s..." >> staging-deployment-report.txt
-        sleep 10
-      done
-
-      if [ "$HEALTH_PASSED" = "false" ]; then
-        echo "Staging environment health check failed after 5 minutes" >> staging-deployment-report.txt
-        exit 1
-      fi
-    - |
-      echo "Staging deployment completed successfully!"
-      echo "Staging URL: https://${STAGING_FQDN}"
-      echo ""
-      echo "============================================"
-      echo "TESTING INSTRUCTIONS:"
-      echo "============================================"
-      echo "1. Test the application at: https://${STAGING_FQDN}"
-      echo "2. Verify all functionality works as expected"
-      echo "3. When testing is complete, run 'stop-staging' job to:"
-      echo "   - Delete the staging environment"
-      echo "   - Unblock the MR for merging"
-      echo "   - Clean up the staging branch"
-      echo "============================================"
-      echo ""
-      echo "Staging deployment completed at $(date)" >> staging-deployment-report.txt
-      echo "Status: SUCCESS - Ready for testing" >> staging-deployment-report.txt
-  artifacts:
-    when: always
-    paths:
-      - staging-deployment-report.txt
-    expire_in: 1 month
-  environment:
-    name: staging
-    url: https://${STAGING_WEBAPP_NAME}.${APP_LOCATION}.azurecontainerapps.io
-    on_stop: stop-staging
-    deployment_tier: staging
-    auto_stop_in: 3 days
-
-stop-staging:
-  stage: deploy:staging
-  image: mcr.microsoft.com/azure-cli:latest
-  rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
-      when: manual
-
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -815,368 +419,314 @@ stop-staging:
         --tenant "$AZURE_TENANT_ID"
       az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 
-    - apt-get update && apt-get install -y curl jq
+      # Install required tools
+      apt-get update -y && apt-get install -y curl jq || true
 
+deploy-review:
+  extends: .deploy_review_base
+  environment:
+    # Dynamic environment name based on MR IID
+    name: review/$CI_MERGE_REQUEST_IID
+    # URL dynamically set after deployment
+    url: https://$REVIEW_APP_FQDN
+    auto_stop_in: $REVIEW_APP_AUTO_STOP_IN
+    deployment_tier: staging
   script:
     - |
-      set -euo pipefail
+      # Load image version
+      IMAGE_TAG=$(cat "$VERSION_FILE")
+      echo "Deploying Docker image version: $IMAGE_TAG"
 
-      echo "Stopping staging environment and unblocking MR merge…"
+      # Construct unique app name for this review environment
+      # Using MR IID for uniqueness: {APP}-review-{MR_IID}
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
 
-      MR_NUMBER=$(echo "$CI_COMMIT_REF_NAME" | sed -n 's/^staging\/mr-\([0-9]\+\)-.*/\1/p')
-      SOURCE_BRANCH=$(echo "$CI_COMMIT_REF_NAME" | sed -n 's/^staging\/mr-[0-9]\+-\(.*\)$/\1/p')
-
-      if [ -z "$SOURCE_BRANCH" ]; then
-        echo "Could not determine source branch from $CI_COMMIT_REF_NAME"
-        exit 0
-      fi
-
-      echo "Source branch: $SOURCE_BRANCH"
-      echo "MR number (from branch): $MR_NUMBER"
-
-      STAGING_WEBAPP_NAME="${AZURE_WEBAPP_NAME}-staging-mr${MR_NUMBER}"
-
-      echo "Deleting Azure Container App: $STAGING_WEBAPP_NAME"
-      # Use portable redirection and non-interactive delete. Wait briefly for deletion to complete.
-      if az containerapp show --name "$STAGING_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-        echo "Found Container App — deleting ${STAGING_WEBAPP_NAME}..."
-        # Delete without interactive prompt
-        az containerapp delete --name "$STAGING_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --yes || {
-          echo "Warning: az containerapp delete returned non-zero" >&2
+      echo "Creating/Updating review environment: $REVIEW_APP_NAME"
+      echo "Environment: review/$CI_MERGE_REQUEST_IID" > review-deployment-report.txt
+      echo "Image tag: $IMAGE_TAG" >> review-deployment-report.txt
+      echo "Target: $REVIEW_APP_NAME" >> review-deployment-report.txt
+      echo "MR IID: $CI_MERGE_REQUEST_IID" >> review-deployment-report.txt
+      echo "Deployment started: $(date)" >> review-deployment-report.txt
+    - |
+      # Create or update Azure Container App
+      if ! az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &>/dev/null; then
+        echo "✓ Creating new review Container App: $REVIEW_APP_NAME"
+        az containerapp create \
+          --name "$REVIEW_APP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --environment "$CONTAINERAPPS_ENV" \
+          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
+          --registry-server "$CI_REGISTRY" \
+          --registry-username "$CI_REGISTRY_USER" \
+          --registry-password "$CI_JOB_TOKEN" \
+          --ingress external \
+          --target-port 8501 \
+          --min-replicas 0 \
+          --max-replicas 1 >> review-deployment-report.txt 2>&1 || {
+          echo "✗ Failed to create Container App" >> review-deployment-report.txt
+          exit 1
         }
       else
-        echo "Staging Container App already gone"
+        echo "✓ Review Container App exists - updating image..."
+        az containerapp update \
+          --name "$REVIEW_APP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> review-deployment-report.txt 2>&1
+
+        # Restart the latest revision
+        REVISION_NAME=$(az containerapp revision list \
+          --name "$REVIEW_APP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --query '[-1].name' -o tsv 2>/dev/null || echo "")
+
+        if [ -n "$REVISION_NAME" ]; then
+          az containerapp revision restart \
+            --name "$REVIEW_APP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$REVISION_NAME" >> review-deployment-report.txt 2>&1
+        fi
       fi
+    - |
+      # Retrieve FQDN and wait for availability
+      REVIEW_APP_FQDN=$(az containerapp show \
+        --name "$REVIEW_APP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null)
 
-      MR_JSON=$(curl --silent --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests?source_branch=${SOURCE_BRANCH}&state=opened")
-
-      MR_IID=$(echo "$MR_JSON" | jq -r '.[0].iid // empty')
-
-      if [ -z "$MR_IID" ]; then
-        echo "No open MR found for branch $SOURCE_BRANCH"
+      if [ -z "$REVIEW_APP_FQDN" ]; then
+        echo "✗ Could not determine review Container App FQDN" >> review-deployment-report.txt
         exit 1
       fi
 
-      echo "Found MR IID: $MR_IID"
+      echo "✓ Review Container App FQDN: $REVIEW_APP_FQDN" >> review-deployment-report.txt
+      export REVIEW_APP_FQDN
 
-      # Try the reliable flow: use the MR's head_pipeline.sha to find running pipelines
-      MR_DETAIL=$(curl --silent --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${MR_IID}" || true)
-      PIPELINE_SHA=$(echo "$MR_DETAIL" | jq -r '.head_pipeline.sha // empty')
-      PIPELINE_ID=$(echo "$MR_DETAIL" | jq -r '.head_pipeline.id // empty')
-
-      if [ -z "$PIPELINE_SHA" ]; then
-        echo "No pipeline SHA found for MR $MR_IID"
-        exit 1
-      fi
-
-      echo "Using MR pipeline SHA: $PIPELINE_SHA"
-
-      echo "Setting commit status to SUCCESS"
-
-      curl --silent --request POST \
-        --header "PRIVATE-TOKEN: ${GITLAB_API_TOKEN}" \
-        --header "Content-Type: application/json" \
-        --data '{
-          "state": "success",
-          "name": "staging/mr-'"${MR_NUMBER}"'",
-          "target_url": "'"${CI_PIPELINE_URL}"'",
-          "description": "Staging environment stopped — ready to merge"
-        }' \
-        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/statuses/${PIPELINE_SHA}?pipeline_id=${PIPELINE_ID}"
-
-      echo "SUCCESS: MR is now unblocked for merge"
-
-  environment:
-    name: staging
-    action: stop
-
-
-# Staging cleanup - Unprotects and deletes staging branch
-# Requires GITLAB_API_TOKEN: Project Access Token with 'api' scope
-cleanup-staging:
-  stage: deploy:staging
-  image: alpine:latest
-  needs:
-    - job: stop-staging
-  rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^staging\/mr-.*$/
-      when: on_success
-  before_script:
-    - |
-      apk add --no-cache git curl
-      git config --global user.email "gitlab-ci@gitlab.com"
-      git config --global user.name "GitLab CI"
-      git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-  script:
-    - |
-      echo "========================================"
-      echo "STAGING CLEANUP - Branch Teardown"
-      echo "========================================"
-      echo "Branch: $CI_COMMIT_REF_NAME"
-      echo "Cleanup started at $(date)" > cleanup-report.txt
-    - |
-      # Step 1: Unprotect the staging branch
-      echo "Step 1: Unprotecting staging branch..."
-      ENCODED_BRANCH=$(echo "$CI_COMMIT_REF_NAME" | sed 's/\//%2F/g')
-
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        echo "Removing branch protection via API..."
-        UNPROTECT_RESPONSE=$(curl --silent --write-out "\nHTTP_CODE:%{http_code}" --request DELETE \
-          --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/protected_branches/${ENCODED_BRANCH}")
-        HTTP_CODE=$(echo "$UNPROTECT_RESPONSE" | grep "HTTP_CODE" | cut -d':' -f2)
-
-        if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ]; then
-          echo "Branch protection removed" >> cleanup-report.txt
-          echo "SUCCESS: Branch protection removed"
-        else
-          echo "Warning: Could not remove protection (HTTP $HTTP_CODE)" >> cleanup-report.txt
+      # Perform health checks
+      echo "Performing health checks on https://${REVIEW_APP_FQDN}..."
+      for i in {1..30}; do
+        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${REVIEW_APP_FQDN}" || echo "000")
+        if [ "$response_code" = "200" ]; then
+          echo "✓ Health check passed (attempt $i)" >> review-deployment-report.txt
+          echo "✓ Review environment is ready!" >> review-deployment-report.txt
+          break
         fi
-      else
-        echo "WARNING: GITLAB_API_TOKEN not set - cannot unprotect branch" >> cleanup-report.txt
-        echo "WARNING: GITLAB_API_TOKEN not set"
-      fi
-    - |
-      # Step 2: Delete the staging branch
-      echo "Step 2: Deleting staging branch..."
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        echo "Deleting branch via API..."
-        DELETE_RESPONSE=$(curl --silent --write-out "\nHTTP_CODE:%{http_code}" --request DELETE \
-          --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/branches/${ENCODED_BRANCH}")
-        HTTP_CODE=$(echo "$DELETE_RESPONSE" | grep "HTTP_CODE" | cut -d':' -f2)
+        echo "  Health check attempt $i failed (HTTP $response_code), retrying..." >> review-deployment-report.txt
+        sleep 10
+      done
 
-        if [ "$HTTP_CODE" = "204" ]; then
-          echo "Branch deleted: $CI_COMMIT_REF_NAME" >> cleanup-report.txt
-          echo "SUCCESS: Staging branch deleted"
-        else
-          echo "Warning: Could not delete branch via API (HTTP $HTTP_CODE)" >> cleanup-report.txt
-          echo "Trying git push --delete..."
-          git push origin --delete "$CI_COMMIT_REF_NAME" 2>&1 && echo "Branch deleted via git" >> cleanup-report.txt || echo "Could not delete branch" >> cleanup-report.txt
-        fi
-      else
-        echo "Trying to delete branch via git..."
-        git push origin --delete "$CI_COMMIT_REF_NAME" 2>&1 && echo "Branch deleted via git" >> cleanup-report.txt || echo "Could not delete branch - manual deletion required" >> cleanup-report.txt
-      fi
-    - |
-      echo "========================================"
-      echo "CLEANUP COMPLETE"
-      echo "========================================"
-      echo "Cleanup completed at $(date)" >> cleanup-report.txt
-      cat cleanup-report.txt
-      # Note: Commit status is set in stop-staging job to unblock MR immediately
+      echo "Review deployment completed: $(date)" >> review-deployment-report.txt
+      echo "" >> review-deployment-report.txt
+      echo "Access review app at: https://${REVIEW_APP_FQDN}"
   artifacts:
     when: always
     paths:
-      - cleanup-report.txt
-    expire_in: 1 week
-  allow_failure: true
+      - review-deployment-report.txt
+    expire_in: 30 days
 
-# ============================================
-# PRODUCTION ENVIRONMENT DEPLOYMENT
-# ============================================
+stop-review:
+  extends: .deploy_review_base
+  when: manual
+  environment:
+    name: review/$CI_MERGE_REQUEST_IID
+    action: stop
+  script:
+    - |
+      echo "Stopping review environment: review/$CI_MERGE_REQUEST_IID"
 
-deploy-production:
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
+
+      echo "Deleting Azure Container App: $REVIEW_APP_NAME" > review-stop-report.txt
+
+      if az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+        echo "✓ Found Container App - deleting..."
+        az containerapp delete \
+          --name "$REVIEW_APP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --yes >> review-stop-report.txt 2>&1 || {
+          echo "⚠ Deletion returned non-zero exit code (may already be deleted)" >> review-stop-report.txt
+        }
+      else
+        echo "✓ Review Container App already deleted" >> review-stop-report.txt
+      fi
+
+      echo "Review environment cleanup completed: $(date)" >> review-stop-report.txt
+  artifacts:
+    when: always
+    paths:
+      - review-stop-report.txt
+    expire_in: 7 days
+
+
+# =====================================================
+# DEPLOY TO PRODUCTION
+# =====================================================
+# Production deployments run only on main branch
+# Requires manual trigger for safety
+
+.deploy_production_base:
   stage: deploy:production
   image: mcr.microsoft.com/azure-cli:latest
   needs:
     - job: docker-build
       artifacts: true
   rules:
+    # Only for main branch
     - if: $CI_COMMIT_REF_NAME == "main"
       when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
       if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$AZURE_TENANT_ID" ]; then
-        echo "Error: Missing Azure credentials. Ensure variables are configured as protected."
-        echo "Production deployment requires main branch or protected branch."
+        echo "✗ Missing Azure credentials"
         exit 1
       fi
-      az login --service-principal --username "$AZURE_CLIENT_ID" --password "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+
+      az login --service-principal \
+        --username "$AZURE_CLIENT_ID" \
+        --password "$AZURE_CLIENT_SECRET" \
+        --tenant "$AZURE_TENANT_ID"
+
       az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      # ensure jq and curl are available for GitLab API calls
-      apt-get update -y && apt-get install -y jq curl || true
+      apt-get update -y && apt-get install -y curl jq || true
+
+deploy-production:
+  extends: .deploy_production_base
+  environment:
+    name: production
+    url: https://$PRODUCTION_FQDN
+    deployment_tier: production
+    on_stop: stop-production
   script:
     - |
-      if [ -f "$VERSION_FILE" ]; then
-        SEMANTIC_VERSION=$(cat $VERSION_FILE)
-        IMAGE_TAG="$SEMANTIC_VERSION"
-      else
-        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-      fi
-      echo "=== PRODUCTION DEPLOYMENT ==="
-      echo "Production deployment started at $(date)" > production-deployment-report.txt
-      echo "Environment: PRODUCTION" >> production-deployment-report.txt
-      echo "Image tag: $IMAGE_TAG" >> production-deployment-report.txt
-      echo "Target: ${PRODUCTION_WEBAPP_NAME}" >> production-deployment-report.txt
-      echo "Pipeline ID: $CI_PIPELINE_ID" >> production-deployment-report.txt
-      echo "Commit SHA: $CI_COMMIT_SHA" >> production-deployment-report.txt
+      # Load image version
+      IMAGE_TAG=$(cat "$VERSION_FILE")
+      echo "Deploying Docker image version: $IMAGE_TAG"
+
+      PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
+
+      echo "Deploying to production: $PRODUCTION_WEBAPP_NAME" > production-deployment-report.txt
+      echo "Image tag: $IMAGE_TAG" >> production-deployment-report-report.txt
+      echo "Deployment started: $(date)" >> production-deployment-report.txt
     - |
-      # Store deployment metadata for rollback
-      echo "$IMAGE_TAG" > current-production-version.txt
-      echo "$CI_PIPELINE_ID" > current-production-pipeline.txt
-      echo "$(date -Iseconds)" > production-deployment-timestamp.txt
-      echo "Preparing to deploy Container App: ${PRODUCTION_WEBAPP_NAME}" >> production-deployment-report.txt
-    - |
-      # Create or update a minimal Container App for production
-      echo "Creating or updating production Container App: ${PRODUCTION_WEBAPP_NAME}"
-      if ! az containerapp show --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} &> /dev/null; then
-        echo "Creating Container App: ${PRODUCTION_WEBAPP_NAME}" >> production-deployment-report.txt
+      # Create or update production Container App
+      if ! az containerapp show --name "$PRODUCTION_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &>/dev/null; then
+        echo "✓ Creating new production Container App: $PRODUCTION_WEBAPP_NAME"
         az containerapp create \
-          --name ${PRODUCTION_WEBAPP_NAME} \
-          --resource-group $AZURE_RESOURCE_GROUP \
-          --environment $CONTAINERAPPS_ENV \
-          --image ${DOCKER_IMAGE_URI}:${IMAGE_TAG} \
-          --registry-server ${DOCKER_REGISTRY} \
-          --registry-username ${AZURE_CLIENT_ID} \
-          --registry-password ${AZURE_CLIENT_SECRET} \
+          --name "$PRODUCTION_WEBAPP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --environment "$CONTAINERAPPS_ENV" \
+          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
+          --registry-server "$CI_REGISTRY" \
+          --registry-username "$CI_REGISTRY_USER" \
+          --registry-password "$CI_JOB_TOKEN" \
           --ingress external \
           --target-port 8501 \
-          --min-replicas 0 \
-          --max-replicas ${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || { echo "Container App creation failed" >> production-deployment-report.txt; exit 1; }
+          --min-replicas "${PRODUCTION_MIN_REPLICAS:-0}" \
+          --max-replicas "${PRODUCTION_MAX_REPLICAS:-3}" >> production-deployment-report.txt 2>&1 || {
+          echo "✗ Failed to create Container App" >> production-deployment-report.txt
+          exit 1
+        }
       else
-        echo "Container App exists; updating image and scaling settings" >> production-deployment-report.txt
-        # Use --image to update the container image (avoids complex --set quoting issues)
+        echo "✓ Production Container App exists - updating image..."
         az containerapp update \
-          --name ${PRODUCTION_WEBAPP_NAME} \
-          --resource-group $AZURE_RESOURCE_GROUP \
+          --name "$PRODUCTION_WEBAPP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
           --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --set template.scale.minReplicas=${PRODUCTION_MIN_REPLICAS:-0} \
-                 template.scale.maxReplicas=${PRODUCTION_MAX_REPLICAS:-3} >> production-deployment-report.txt 2>&1 || true
-        # Resolve newest revision name and restart it explicitly
-        REVISION_NAME=$(az containerapp revision list --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query '[-1].name' -o tsv 2>/dev/null || echo "")
+          --set template.scale.minReplicas="${PRODUCTION_MIN_REPLICAS:-0}" \
+                 template.scale.maxReplicas="${PRODUCTION_MAX_REPLICAS:-3}" >> production-deployment-report.txt 2>&1
+
+        # Restart the latest revision
+        REVISION_NAME=$(az containerapp revision list \
+          --name "$PRODUCTION_WEBAPP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --query '[-1].name' -o tsv 2>/dev/null || echo "")
+
         if [ -n "$REVISION_NAME" ]; then
-          az containerapp revision restart --name ${PRODUCTION_WEBAPP_NAME} --resource-group $AZURE_RESOURCE_GROUP --revision "$REVISION_NAME" >> production-deployment-report.txt 2>&1 || true
+          az containerapp revision restart \
+            --name "$PRODUCTION_WEBAPP_NAME" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --revision "$REVISION_NAME" >> production-deployment-report.txt 2>&1
         fi
       fi
     - |
-      # Retrieve the FQDN for the container app and wait for it to be available
-      PROD_FQDN=$(az containerapp show --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null || echo "")
-      if [ -z "$PROD_FQDN" ]; then
-        echo "Could not determine production Container App FQDN; failing" >> production-deployment-report.txt
+      # Retrieve FQDN
+      PRODUCTION_FQDN=$(az containerapp show \
+        --name "$PRODUCTION_WEBAPP_NAME" \
+        --resource-group "$AZURE_RESOURCE_GROUP" \
+        --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null)
+
+      if [ -z "$PRODUCTION_FQDN" ]; then
+        echo "✗ Could not determine production Container App FQDN" >> production-deployment-report.txt
         exit 1
       fi
-      echo "Production Container App FQDN: $PROD_FQDN" >> production-deployment-report.txt
+
+      echo "✓ Production Container App FQDN: $PRODUCTION_FQDN" >> production-deployment-report.txt
+      export PRODUCTION_FQDN
+
       echo "Waiting 30s for production container app to warm up..." >> production-deployment-report.txt
       sleep 30
-      # Update GitLab Environment external_url to the exact Container Apps FQDN
-      if [ -n "$GITLAB_API_TOKEN" ] || [ -n "$CI_JOB_TOKEN" ]; then
-        echo "Setting GitLab Environment URL to https://$PROD_FQDN"
-        if [ -n "$GITLAB_API_TOKEN" ]; then
-          AUTH_HEADER="PRIVATE-TOKEN: $GITLAB_API_TOKEN"
-        else
-          AUTH_HEADER="JOB-TOKEN: $CI_JOB_TOKEN"
-        fi
-        ENV_NAME="production"
-        EXISTING_ENV=$(curl --silent --header "$AUTH_HEADER" "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments?search=${ENV_NAME}" || true)
-        ENV_ID=$(echo "$EXISTING_ENV" | jq -r 'if type=="array" and .[0] then .[0].id else empty end')
-        if [ -n "$ENV_ID" ]; then
-          curl --silent --request PUT --header "$AUTH_HEADER" --header "Content-Type: application/json" --data '{"external_url":"'"https://$PROD_FQDN"'"}' "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments/${ENV_ID}" || true
-        else
-          curl --silent --request POST --header "$AUTH_HEADER" --header "Content-Type: application/json" --data '{"name":"'"$ENV_NAME"'","external_url":"'"https://$PROD_FQDN"'"}' "$CI_API_V4_URL/projects/${CI_PROJECT_ID}/environments" || true
-        fi
-      else
-        echo "No GitLab token available; skipping environment URL update" >> production-deployment-report.txt
-      fi
     - |
-      # Production health checks against Container App FQDN
-      echo "Performing CRITICAL production health checks against https://$PROD_FQDN"
-      HEALTH_PASSED=false
+      # Production health checks (critical stage)
+      echo "Performing CRITICAL production health checks against https://${PRODUCTION_FQDN}..."
       for i in {1..60}; do
-        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://$PROD_FQDN" || echo "000")
+        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${PRODUCTION_FQDN}" || echo "000")
         if [ "$response_code" = "200" ]; then
-          echo "Production health check PASSED (attempt $i)" >> production-deployment-report.txt
-          HEALTH_PASSED=true
+          echo "✓ Production health check PASSED (attempt $i)" >> production-deployment-report.txt
+          echo "✓ Production environment is ready!" >> production-deployment-report.txt
           break
         fi
-        echo "Health check attempt $i failed (HTTP $response_code), retrying in 10s..." >> production-deployment-report.txt
+        echo "  Health check attempt $i failed (HTTP $response_code), retrying..." >> production-deployment-report.txt
         sleep 10
       done
 
-      if [ "$HEALTH_PASSED" = "false" ]; then
-        echo "CRITICAL: Production health check FAILED after timeout" >> production-deployment-report.txt
+      if [ "$response_code" != "200" ]; then
+        echo "✗ CRITICAL: Production health check FAILED" >> production-deployment-report.txt
         exit 1
       fi
     - |
-      # Success notifications
-      echo "PRODUCTION DEPLOYMENT SUCCESSFUL!"
-      echo ""
-      echo "============================================"
-      echo "PRODUCTION DEPLOYMENT COMPLETE"
-      echo "============================================"
-      echo "Production URL: https://${PROD_FQDN}"
-      echo "Deployed version: $IMAGE_TAG"
-      echo "Pipeline ID: $CI_PIPELINE_ID"
-      echo ""
-      echo "Please verify the production application is working correctly."
-      echo "============================================"
-      echo ""
-
-      echo "Production deployment COMPLETED SUCCESSFULLY!" >> production-deployment-report.txt
-      echo "Production URL: https://${PROD_FQDN}" >> production-deployment-report.txt
-      echo "Production deployment completed at $(date)" >> production-deployment-report.txt
-      echo "Status: SUCCESS" >> production-deployment-report.txt
-      echo "Health check: PASSED" >> production-deployment-report.txt
+      echo "✓ PRODUCTION DEPLOYMENT SUCCESSFUL!"
+      echo "Production deployment completed: $(date)" >> production-deployment-report.txt
+      echo "Access production at: https://${PRODUCTION_FQDN}"
   artifacts:
     when: always
     paths:
       - production-deployment-report.txt
-      - current-production-version.txt
-      - current-production-pipeline.txt
-      - production-deployment-timestamp.txt
-      - previous-production-version.txt
-      - $VERSION_FILE
     expire_in: 6 months
-  environment:
-    name: production
-    url: https://${PRODUCTION_WEBAPP_NAME}.${APP_LOCATION}.azurecontainerapps.io
-    on_stop: stop-production
-    deployment_tier: production
-
-  allow_failure: false
 
 stop-production:
-  stage: deploy:production
-  image: mcr.microsoft.com/azure-cli:latest
-  rules:
-    - if: $CI_COMMIT_REF_NAME == "main"
-      when: manual
-  allow_failure: true
-  before_script:
-    - |
-      echo "Authenticating with Azure..."
-      az login --service-principal --username "$AZURE_CLIENT_ID" --password "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
-      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+  extends: .deploy_production_base
+  when: manual
+  environment:
+    name: production
+    action: stop
   script:
     - |
-      echo "STOPPING PRODUCTION ENVIRONMENT"
-      echo "Production stop initiated at $(date)" > production-stop-report.txt
-      echo "Pipeline ID: $CI_PIPELINE_ID" >> production-stop-report.txt
+      echo "Stopping production environment" > production-stop-report.txt
 
-      az containerapp stop --name ${PRODUCTION_WEBAPP_NAME} --resource-group ${AZURE_RESOURCE_GROUP} >> production-stop-report.txt 2>&1
-      echo "Production environment stopped at $(date)" >> production-stop-report.txt
+      PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
+
+      echo "Stopping production Container App: $PRODUCTION_WEBAPP_NAME" >> production-stop-report.txt
+
+      if az containerapp show --name "$PRODUCTION_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+        echo "✓ Found Container App - stopping..."
+        az containerapp stop \
+          --name "$PRODUCTION_WEBAPP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" >> production-stop-report.txt 2>&1
+      else
+        echo "✓ Production Container App already stopped" >> production-stop-report.txt
+      fi
+
+      echo "Production stop completed: $(date)" >> production-stop-report.txt
   artifacts:
     when: always
     paths:
       - production-stop-report.txt
     expire_in: 6 months
-  when: manual
-  environment:
-    name: production
-    action: stop
 
-# ============================================
-# POST-DEPLOYMENT VERIFICATION
-# ============================================
-
-# Smoke testing disabled - tests run locally only
-# smoke:testing job removed since testing deployment is disabled
-
-# ============================================
-# RELEASE MANAGEMENT
-# ============================================
+# =====================================================
+# RELEASE MANAGEMENT STAGE
+# =====================================================
+# Creates and pushes version tags to Git
 
 create-version-tag:
   stage: release
@@ -1185,43 +735,38 @@ create-version-tag:
     - job: deploy-production
       artifacts: true
   before_script:
-    - apk add --no-cache git
+    - apk add --no-cache git curl
   script:
     - |
-      if [ -f "$VERSION_FILE" ]; then
-        VERSION=$(cat $VERSION_FILE)
-        echo "Current version: $VERSION"
-      else
-        echo "Error: VERSION file not found"
-        echo "Create a VERSION file with semantic version (e.g., 1.0.0)"
-        exit 1
-      fi
-      # Choose token for pushing tags. Prefer project token with 'api' scope.
-      if [ -n "$GITLAB_API_TOKEN" ]; then
-        PUSH_REMOTE="https://oauth2:${GITLAB_API_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-      elif [ -n "$CI_JOB_TOKEN" ]; then
-        PUSH_REMOTE="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-      else
-        echo "ERROR: No token available to push git tags. Set GITLAB_API_TOKEN or rely on CI_JOB_TOKEN." >&2
+      if [ ! -f "$VERSION_FILE" ]; then
+        echo "✗ VERSION file not found"
         exit 1
       fi
 
-      git config --global user.email "gitlab-ci@${CI_SERVER_HOST}" || true
-      git config --global user.name "GitLab CI" || true
+      VERSION=$(cat "$VERSION_FILE")
+      echo "✓ Current version: $VERSION"
+
+      # Use CI_JOB_TOKEN for authentication (built-in GitLab variable)
+      git config --global user.email "gitlab-ci@${CI_SERVER_HOST}"
+      git config --global user.name "GitLab CI"
+
+      PUSH_REMOTE="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
       git remote set-url origin "$PUSH_REMOTE"
       git fetch --all --tags || true
 
       TAGNAME="v${VERSION}"
+
       if git rev-parse "refs/tags/${TAGNAME}" >/dev/null 2>&1; then
-        echo "Tag ${TAGNAME} already exists. Skipping creation."
+        echo "✓ Tag ${TAGNAME} already exists - skipping creation"
       else
-        echo "Creating annotated tag ${TAGNAME} for commit ${CI_COMMIT_SHA}"
+        echo "✓ Creating annotated tag ${TAGNAME}..."
         git tag -a "$TAGNAME" -m "Release ${TAGNAME}" "$CI_COMMIT_SHA"
+
         echo "Pushing tag ${TAGNAME} to origin..."
         if git push origin "$TAGNAME" --follow-tags; then
-          echo "Tag pushed: ${TAGNAME}"
+          echo "✓ Tag ${TAGNAME} pushed successfully"
         else
-          echo "ERROR: Failed to push tag ${TAGNAME}" >&2
+          echo "✗ Failed to push tag ${TAGNAME}"
           exit 1
         fi
       fi
@@ -1230,4 +775,41 @@ create-version-tag:
       - $VERSION_FILE
     expire_in: 1 day
   rules:
+    # Only for main branch
     - if: $CI_COMMIT_REF_NAME == "main"
+
+# =====================================================
+# CLEANUP STAGE - Environment Auto-Stop
+# =====================================================
+# Automatic cleanup of review environments
+
+cleanup-review:
+  stage: cleanup
+  image: mcr.microsoft.com/azure-cli:latest
+  rules:
+    # Run only for closed/merged merge requests
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_STATE == "closed"'
+  before_script:
+    - |
+      az login --service-principal \
+        --username "$AZURE_CLIENT_ID" \
+        --password "$AZURE_CLIENT_SECRET" \
+        --tenant "$AZURE_TENANT_ID"
+
+      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+  script:
+    - |
+      echo "Cleaning up review environments..."
+
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
+
+      if az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
+        echo "✓ Deleting orphaned review app: $REVIEW_APP_NAME"
+        az containerapp delete \
+          --name "$REVIEW_APP_NAME" \
+          --resource-group "$AZURE_RESOURCE_GROUP" \
+          --yes 2>&1 || echo "✓ Already deleted or in deletion process"
+      else
+        echo "✓ Review app $REVIEW_APP_NAME not found (already cleaned up)"
+      fi
+  allow_failure: true
