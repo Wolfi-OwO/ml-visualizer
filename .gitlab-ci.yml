@@ -343,6 +343,7 @@ docker-build:
   rules:
     # Only for merge requests
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -457,6 +458,7 @@ deploy-review:
 stop-review:
   extends: .deploy_review_base
   when: manual
+  allow_failure: true
   environment:
     name: staging/$CI_COMMIT_SHORT_SHA
     action: stop
@@ -500,10 +502,11 @@ stop-review:
   needs:
     - job: docker-build
       artifacts: true
+
   rules:
     # Only for tagged releases
     - if: $CI_COMMIT_TAG
-      when: on_success
+      when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -627,6 +630,7 @@ deploy-production:
 stop-production:
   extends: .deploy_production_base
   when: manual
+  allow_failure: true
   environment:
     name: production
     action: stop
