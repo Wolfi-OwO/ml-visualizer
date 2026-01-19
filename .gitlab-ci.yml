@@ -35,6 +35,7 @@ variables:
   # Use GitLab built-in registry if available, otherwise use custom registry
   DOCKER_REGISTRY: "${ACR_REGISTRY:-dsaiappacr01.azurecr.io}"
   DOCKER_IMAGE_URI: "${ACR_REGISTRY:-dsaiappacr01.azurecr.io}/ml-visualizer"
+
   LATEST_TAG: "latest"
   APP_DIR: "."
 
@@ -68,7 +69,7 @@ check-variables:
       echo "Validating required GitLab built-in CI variables..."
       echo "✓ CI_REGISTRY: $ACR_REGISTRY"
       echo "✓ CI_REGISTRY_IMAGE: $ACR_REGISTRY_IMAGE"
-      echo "✓ CI_REGISTRY_USER: $ACR_REGISTRY_USER"
+      echo "✓ CI_REGISTRY_USER: $ACR_USERNAME"
       echo "✓ CI_JOB_TOKEN: [set]"
       echo "✓ CI_COMMIT_REF_SLUG: $CI_COMMIT_REF_SLUG"
       echo "✓ CI_PROJECT_ID: $CI_PROJECT_ID"
@@ -283,7 +284,7 @@ docker-build:
   before_script:
     - |
       echo "Authenticating with Azure Container Registry..."
-      echo "$ACR_PASSWORD" | docker login -u "$ACR_REGISTRY_USER" --password-stdin "$ACR_REGISTRY"
+      echo "$ACR_PASSWORD" | docker login -u "$ACR_USERNAME" --password-stdin "$ACR_REGISTRY"
   script:
     - |
       # Determine image tag: prefer tag name, fallback to commit SHA
@@ -389,7 +390,7 @@ deploy-review:
           --environment "$CONTAINERAPPS_ENV" \
           --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
           --registry-server "$ACR_REGISTRY" \
-          --registry-username "$ACR_REGISTRY_USER" \
+          --registry-username "$ACR_USERNAME" \
           --registry-password "$ACR_PASSWORD" \
           --ingress external \
           --target-port 8501 \
@@ -551,7 +552,7 @@ deploy-production:
           --environment "$CONTAINERAPPS_ENV" \
           --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
           --registry-server "$ACR_REGISTRY" \
-          --registry-username "$ACR_REGISTRY_USER" \
+          --registry-username "$ACR_USERNAME" \
           --registry-password "$ACR_PASSWORD" \
           --ingress external \
           --target-port 8501 \
