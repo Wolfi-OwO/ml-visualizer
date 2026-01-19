@@ -33,8 +33,8 @@ image: mcr.microsoft.com/azure-cli:latest
 variables:
   DOCKER_IMAGE_NAME: "ml-visualizer"
   # Use GitLab built-in registry if available, otherwise use custom registry
-  DOCKER_REGISTRY: "${DOCKER_REGISTRY:-dsaiappacr01.azurecr.io}"
-  DOCKER_IMAGE_URI: "${DOCKER_REGISTRY:-dsaiappacr01.azurecr.io}/ml-visualizer"
+  DOCKER_REGISTRY: "${ACR_NAME}.azurecr.io"
+  DOCKER_IMAGE_URI: "${DOCKER_REGISTRY}/ml-visualizer"
 
   LATEST_TAG: "latest"
   APP_DIR: "."
