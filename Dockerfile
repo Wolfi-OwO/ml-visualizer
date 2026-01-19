@@ -62,8 +62,10 @@ WORKDIR /app
 # Copy virtual environment from builder
 COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
 
+# Persist application version inside the image
+RUN echo "${APP_VERSION}" > /app/VERSION && chown appuser:appuser /app/VERSION
+
 # Copy application files
-COPY --chown=appuser:appuser VERSION ./VERSION
 COPY --chown=appuser:appuser src/pages ./src/pages
 COPY --chown=appuser:appuser src/tests ./src/tests
 COPY --chown=appuser:appuser src/styles ./src/styles
