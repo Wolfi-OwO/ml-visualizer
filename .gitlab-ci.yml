@@ -37,7 +37,6 @@ variables:
   DOCKER_IMAGE_URI: "${CI_REGISTRY_IMAGE}"
   LATEST_TAG: "latest"
   APP_DIR: "."
-  VERSION_FILE: "VERSION"
 
   # Health Check Configuration
   HEALTH_CHECK_TIMEOUT: "300"
@@ -276,59 +275,27 @@ dependency-audit:
 # BUILD STAGE - Docker Build using Official GitLab Template
 # =====================================================
 
-compute-semver:
-  stage: build
-  image: alpine:latest
-  script:
-    - |
-      # Compute build version
-      # - Tags: use the tag name (strip leading v)
-      # - Everything else (MRs/main): use the short SHA
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        SEMANTIC_VERSION="${CI_COMMIT_TAG#v}"
-        echo "✓ Tag pipeline detected - using tag: $CI_COMMIT_TAG (normalized: $SEMANTIC_VERSION)"
-      else
-        SEMANTIC_VERSION="${CI_COMMIT_SHORT_SHA}"
-        echo "✓ Using commit SHA for non-tag build: $SEMANTIC_VERSION"
-      fi
-
-      echo "$SEMANTIC_VERSION" > "$VERSION_FILE"
-      echo "APP_VERSION=$SEMANTIC_VERSION" > computed_version.env
-  artifacts:
-    when: always
-    paths:
-      - VERSION
-      - computed_version.env
-    expire_in: 1 hour
-  rules:
-    # Tags (production) and merge requests/main (staging/dev)
-    - if: $CI_COMMIT_TAG
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_REF_NAME == "main"
-
 docker-build:
   stage: build
   image: docker:latest
-  needs:
-    - job: compute-semver
-      artifacts: true
   services:
     - docker:dind
   before_script:
     - |
       echo "Authenticating with GitLab Container Registry..."
-      # Use GitLab built-in variables for authentication
       echo "$CI_JOB_TOKEN" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - |
-      # Load semantic version
-      if [ -f "$VERSION_FILE" ]; then
-        IMAGE_TAG=$(cat "$VERSION_FILE")
-        echo "✓ Using semantic version from VERSION file: $IMAGE_TAG"
+      # Determine image tag: prefer tag name, fallback to commit SHA
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="$CI_COMMIT_TAG"
+        echo "✓ Using tag for production build: $IMAGE_TAG"
       else
-        IMAGE_TAG="${CI_COMMIT_SHORT_SHA}"
-        echo "⚠ No VERSION file found, using commit SHA: $IMAGE_TAG"
+        IMAGE_TAG="$CI_COMMIT_SHORT_SHA"
+        echo "✓ Using commit SHA for non-tag build: $IMAGE_TAG"
       fi
+
+      echo "$IMAGE_TAG" > image_tag.txt
     - |
       echo "Building Docker image..."
       docker build \
@@ -359,7 +326,7 @@ docker-build:
     when: on_success
     access: all
     paths:
-      - $VERSION_FILE
+      - image_tag.txt
     expire_in: 1 day
 
 # =====================================================
@@ -401,7 +368,7 @@ deploy-review:
   script:
     - |
       # Load image version
-      IMAGE_TAG=$(cat "$VERSION_FILE")
+      IMAGE_TAG=$(cat image_tag.txt)
       echo "Deploying Docker image version: $IMAGE_TAG"
 
       # Construct unique app name for this staging environment
@@ -537,7 +504,7 @@ stop-review:
   rules:
     # Only for tagged releases
     - if: $CI_COMMIT_TAG
-      when: manual
+      when: on_success
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -564,7 +531,7 @@ deploy-production:
   script:
     - |
       # Load image version
-      IMAGE_TAG=$(cat "$VERSION_FILE")
+      IMAGE_TAG=$(cat image_tag.txt)
       echo "Deploying Docker image version: $IMAGE_TAG"
 
       PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
@@ -703,12 +670,12 @@ create-version-tag:
     - apk add --no-cache git curl
   script:
     - |
-      if [ ! -f "$VERSION_FILE" ]; then
-        echo "✗ VERSION file not found"
+      if [ ! -f image_tag.txt ]; then
+        echo "✗ image_tag.txt not found"
         exit 1
       fi
 
-      VERSION=$(cat "$VERSION_FILE")
+      VERSION=$(cat image_tag.txt)
       echo "✓ Current version: $VERSION"
 
       # Use CI_JOB_TOKEN for authentication (built-in GitLab variable)
@@ -719,7 +686,7 @@ create-version-tag:
       git remote set-url origin "$PUSH_REMOTE"
       git fetch --all --tags || true
 
-      TAGNAME="v${VERSION}"
+      TAGNAME="${VERSION}"
 
       if git rev-parse "refs/tags/${TAGNAME}" >/dev/null 2>&1; then
         echo "✓ Tag ${TAGNAME} already exists - skipping creation"
@@ -737,7 +704,7 @@ create-version-tag:
       fi
   artifacts:
     paths:
-      - $VERSION_FILE
+      - image_tag.txt
     expire_in: 1 day
   rules:
     # Only when deploying tagged releases
