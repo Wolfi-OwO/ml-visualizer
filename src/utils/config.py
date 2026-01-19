@@ -18,7 +18,7 @@ def get_version() -> str:
         if env_ver.find(".") == -1:
             return f"{env_ver} - Staging"
         else:
-            return f"v{env_ver}"
+            return f"{env_ver}"
     try:
         # Check multiple locations for VERSION file
         possible_paths = [

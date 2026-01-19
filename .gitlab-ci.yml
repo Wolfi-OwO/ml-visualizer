@@ -4,7 +4,7 @@
 # This pipeline uses:
 # - Dynamic environments based on GitLab variables ($CI_COMMIT_REF_SLUG, $CI_MERGE_REQUEST_IID)
 # - Official GitLab CI templates for Docker builds
-# - Built-in GitLab CI variables (CI_JOB_TOKEN, CI_REGISTRY_IMAGE, etc.)
+# - Built-in GitLab CI variables (CI_REGISTRY_IMAGE, etc.)
 # - No branch-based staging logic
 # - Auto-stop and cleanup for ephemeral environments
 # =====================================================
@@ -71,7 +71,6 @@ check-variables:
       echo "✓ CI_REGISTRY: $DOCKER_REGISTRY"
       echo "✓ CI_REGISTRY_IMAGE: $DOCKER_IMAGE_URI"
       echo "✓ CI_REGISTRY_USER: $ACR_USERNAME"
-      echo "✓ CI_JOB_TOKEN: [set]"
       echo "✓ CI_COMMIT_REF_SLUG: $CI_COMMIT_REF_SLUG"
       echo "✓ CI_PROJECT_ID: $CI_PROJECT_ID"
 
