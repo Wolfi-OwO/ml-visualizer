@@ -33,8 +33,8 @@ image: mcr.microsoft.com/azure-cli:latest
 variables:
   DOCKER_IMAGE_NAME: "ml-visualizer"
   # Use GitLab built-in registry if available, otherwise use custom registry
-  DOCKER_REGISTRY: "${ACR_REGISTRY:-dsaiappacr01.azurecr.io}"
-  DOCKER_IMAGE_URI: "${ACR_REGISTRY:-dsaiappacr01.azurecr.io}/ml-visualizer"
+  DOCKER_REGISTRY: "${DOCKER_REGISTRY:-dsaiappacr01.azurecr.io}"
+  DOCKER_IMAGE_URI: "${DOCKER_REGISTRY:-dsaiappacr01.azurecr.io}/ml-visualizer"
 
   LATEST_TAG: "latest"
   APP_DIR: "."
@@ -68,8 +68,8 @@ check-variables:
   script:
     - |
       echo "Validating required GitLab built-in CI variables..."
-      echo "✓ CI_REGISTRY: $ACR_REGISTRY"
-      echo "✓ CI_REGISTRY_IMAGE: $ACR_REGISTRY_IMAGE"
+      echo "✓ CI_REGISTRY: $DOCKER_REGISTRY"
+      echo "✓ CI_REGISTRY_IMAGE: $DOCKER_IMAGE_URI"
       echo "✓ CI_REGISTRY_USER: $ACR_USERNAME"
       echo "✓ CI_JOB_TOKEN: [set]"
       echo "✓ CI_COMMIT_REF_SLUG: $CI_COMMIT_REF_SLUG"
@@ -88,12 +88,6 @@ check-variables:
       fi
 
       echo "OK: Variable validation completed"
-  artifacts:
-    when: always
-    paths:
-      - validation-report.txt
-    expire_in: 1 week
-
 
 check-dockerfile:
   extends: .validate_base
@@ -170,11 +164,6 @@ syntax-check:
       python -c "import streamlit; import numpy; import pandas; import matplotlib; print('✓ All imports available')"
 
       echo "OK: Syntax checks passed"
-  artifacts:
-    when: always
-    paths:
-      - syntax-report.txt
-    expire_in: 1 week
 
 unit-tests:
   extends: .test_base
@@ -285,7 +274,7 @@ docker-build:
   before_script:
     - |
       echo "Authenticating with Azure Container Registry..."
-      echo "$ACR_PASSWORD" | docker login -u "$ACR_USERNAME" --password-stdin "$ACR_REGISTRY"
+      echo "$ACR_PASSWORD" | docker login -u "$ACR_USERNAME" --password-stdin "$DOCKER_REGISTRY"
   script:
     - |
       # Determine image tag: prefer tag name, fallback to commit SHA
@@ -390,7 +379,7 @@ deploy-review:
           --resource-group "$AZURE_RESOURCE_GROUP" \
           --environment "$CONTAINERAPPS_ENV" \
           --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --registry-server "$ACR_REGISTRY" \
+          --registry-server "$DOCKER_REGISTRY" \
           --registry-username "$ACR_USERNAME" \
           --registry-password "$ACR_PASSWORD" \
           --ingress external \
@@ -451,11 +440,6 @@ deploy-review:
       echo "Staging deployment completed: $(date)" >> review-deployment-report.txt
       echo "" >> review-deployment-report.txt
       echo "Access staging app at: https://${REVIEW_APP_FQDN}"
-  artifacts:
-    when: always
-    paths:
-      - review-deployment-report.txt
-    expire_in: 30 days
 
 stop-review:
   extends: .deploy_review_base
@@ -485,11 +469,6 @@ stop-review:
       fi
 
       echo "Staging environment cleanup completed: $(date)" >> review-stop-report.txt
-  artifacts:
-    when: always
-    paths:
-      - review-stop-report.txt
-    expire_in: 7 days
 
 
 # =====================================================
@@ -552,7 +531,7 @@ deploy-production:
           --resource-group "$AZURE_RESOURCE_GROUP" \
           --environment "$CONTAINERAPPS_ENV" \
           --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --registry-server "$ACR_REGISTRY" \
+          --registry-server "$DOCKER_REGISTRY" \
           --registry-username "$ACR_USERNAME" \
           --registry-password "$ACR_PASSWORD" \
           --ingress external \
@@ -623,11 +602,6 @@ deploy-production:
       echo "✓ PRODUCTION DEPLOYMENT SUCCESSFUL!"
       echo "Production deployment completed: $(date)" >> production-deployment-report.txt
       echo "Access production at: https://${PRODUCTION_FQDN}"
-  artifacts:
-    when: always
-    paths:
-      - production-deployment-report.txt
-    expire_in: 6 months
 
 stop-production:
   extends: .deploy_production_base
@@ -654,11 +628,6 @@ stop-production:
       fi
 
       echo "Production stop completed: $(date)" >> production-stop-report.txt
-  artifacts:
-    when: always
-    paths:
-      - production-stop-report.txt
-    expire_in: 6 months
 
 
 # =====================================================
