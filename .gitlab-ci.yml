@@ -279,54 +279,20 @@ dependency-audit:
 compute-semver:
   stage: build
   image: alpine:latest
-  before_script:
-    - apk add --no-cache curl jq
   script:
     - |
-      # Compute semantic version for the build
-      # For MRs: Use CI_COMMIT_SHORT_SHA
-      # For main: Use semantic versioning with tags
-
-      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
-        # Merge request: Use short SHA for version
-        SEMANTIC_VERSION="${CI_COMMIT_SHORT_SHA}"
-        echo "✓ Merge request detected - using commit SHA: $SEMANTIC_VERSION"
-      elif [ "$CI_COMMIT_REF_NAME" = "main" ]; then
-        # Main branch: Compute semantic version from latest tag
-        echo "✓ Main branch detected - computing semantic version..."
-
-        TOKEN="${CI_JOB_TOKEN}"
-        API="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}"
-
-        # Fetch latest tags
-        TAGS_JSON=$(curl --silent --header "JOB-TOKEN: $TOKEN" "$API/repository/tags?per_page=100&order_by=updated&sort=desc")
-        LATEST_TAG=$(echo "$TAGS_JSON" | jq -r 'if type=="array" then (.[0].name // empty) else empty end')
-
-        if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
-          LATEST_TAG_STRIPPED="0.0.0"
-          echo "  No existing tags found - starting at 0.0.1"
-        else
-          LATEST_TAG_STRIPPED="${LATEST_TAG#v}"
-          echo "  Latest tag: $LATEST_TAG (normalized: $LATEST_TAG_STRIPPED)"
-        fi
-
-        # For simplicity, always bump patch version
-        # (Extend this to use MR labels for major/minor bumps)
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_TAG_STRIPPED"
-
-        MAJOR=${MAJOR:-0}
-        MINOR=${MINOR:-0}
-        PATCH=${PATCH:-0}
-
-        PATCH=$((PATCH + 1))
-        SEMANTIC_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-        echo "  Computed new version: $SEMANTIC_VERSION (from $LATEST_TAG_STRIPPED)"
+      # Compute build version
+      # - Tags: use the tag name (strip leading v)
+      # - Everything else (MRs/main): use the short SHA
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        SEMANTIC_VERSION="${CI_COMMIT_TAG#v}"
+        echo "✓ Tag pipeline detected - using tag: $CI_COMMIT_TAG (normalized: $SEMANTIC_VERSION)"
       else
         SEMANTIC_VERSION="${CI_COMMIT_SHORT_SHA}"
-        echo "✓ Using commit SHA: $SEMANTIC_VERSION"
+        echo "✓ Using commit SHA for non-tag build: $SEMANTIC_VERSION"
       fi
 
-      echo "$SEMANTIC_VERSION" > VERSION
+      echo "$SEMANTIC_VERSION" > "$VERSION_FILE"
       echo "APP_VERSION=$SEMANTIC_VERSION" > computed_version.env
   artifacts:
     when: always
@@ -335,7 +301,8 @@ compute-semver:
       - computed_version.env
     expire_in: 1 hour
   rules:
-    # Run for MRs and main branch only
+    # Tags (production) and merge requests/main (staging/dev)
+    - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME == "main"
 
@@ -385,6 +352,7 @@ docker-build:
       echo "  Version tag: ${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
       echo "  Latest tag: ${DOCKER_IMAGE_URI}:${LATEST_TAG}"
   rules:
+    - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_REF_NAME == "main"
   artifacts:
@@ -409,7 +377,6 @@ docker-build:
   rules:
     # Only for merge requests
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
   before_script:
     - |
       echo "Authenticating with Azure..."
@@ -425,8 +392,8 @@ docker-build:
 deploy-review:
   extends: .deploy_review_base
   environment:
-    # Dynamic environment name based on MR IID
-    name: review/$CI_MERGE_REQUEST_IID
+    # Dynamic environment name based on commit SHA for staging
+    name: staging/$CI_COMMIT_SHORT_SHA
     # URL dynamically set after deployment
     url: https://$REVIEW_APP_FQDN
     auto_stop_in: $REVIEW_APP_AUTO_STOP_IN
@@ -437,20 +404,18 @@ deploy-review:
       IMAGE_TAG=$(cat "$VERSION_FILE")
       echo "Deploying Docker image version: $IMAGE_TAG"
 
-      # Construct unique app name for this review environment
-      # Using MR IID for uniqueness: {APP}-review-{MR_IID}
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
+      # Construct unique app name for this staging environment
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
 
-      echo "Creating/Updating review environment: $REVIEW_APP_NAME"
-      echo "Environment: review/$CI_MERGE_REQUEST_IID" > review-deployment-report.txt
+      echo "Creating/Updating staging environment: $REVIEW_APP_NAME"
+      echo "Environment: staging/$CI_COMMIT_SHORT_SHA" > review-deployment-report.txt
       echo "Image tag: $IMAGE_TAG" >> review-deployment-report.txt
       echo "Target: $REVIEW_APP_NAME" >> review-deployment-report.txt
-      echo "MR IID: $CI_MERGE_REQUEST_IID" >> review-deployment-report.txt
       echo "Deployment started: $(date)" >> review-deployment-report.txt
     - |
       # Create or update Azure Container App
       if ! az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &>/dev/null; then
-        echo "✓ Creating new review Container App: $REVIEW_APP_NAME"
+        echo "✓ Creating new staging Container App: $REVIEW_APP_NAME"
         az containerapp create \
           --name "$REVIEW_APP_NAME" \
           --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -467,7 +432,7 @@ deploy-review:
           exit 1
         }
       else
-        echo "✓ Review Container App exists - updating image..."
+        echo "✓ Staging Container App exists - updating image..."
         az containerapp update \
           --name "$REVIEW_APP_NAME" \
           --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -494,11 +459,11 @@ deploy-review:
         --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null)
 
       if [ -z "$REVIEW_APP_FQDN" ]; then
-        echo "✗ Could not determine review Container App FQDN" >> review-deployment-report.txt
+        echo "✗ Could not determine staging Container App FQDN" >> review-deployment-report.txt
         exit 1
       fi
 
-      echo "✓ Review Container App FQDN: $REVIEW_APP_FQDN" >> review-deployment-report.txt
+      echo "✓ Staging Container App FQDN: $REVIEW_APP_FQDN" >> review-deployment-report.txt
       export REVIEW_APP_FQDN
 
       # Perform health checks
@@ -507,16 +472,16 @@ deploy-review:
         response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${REVIEW_APP_FQDN}" || echo "000")
         if [ "$response_code" = "200" ]; then
           echo "✓ Health check passed (attempt $i)" >> review-deployment-report.txt
-          echo "✓ Review environment is ready!" >> review-deployment-report.txt
+          echo "✓ Staging environment is ready!" >> review-deployment-report.txt
           break
         fi
         echo "  Health check attempt $i failed (HTTP $response_code), retrying..." >> review-deployment-report.txt
         sleep 10
       done
 
-      echo "Review deployment completed: $(date)" >> review-deployment-report.txt
+      echo "Staging deployment completed: $(date)" >> review-deployment-report.txt
       echo "" >> review-deployment-report.txt
-      echo "Access review app at: https://${REVIEW_APP_FQDN}"
+      echo "Access staging app at: https://${REVIEW_APP_FQDN}"
   artifacts:
     when: always
     paths:
@@ -527,13 +492,13 @@ stop-review:
   extends: .deploy_review_base
   when: manual
   environment:
-    name: review/$CI_MERGE_REQUEST_IID
+    name: staging/$CI_COMMIT_SHORT_SHA
     action: stop
   script:
     - |
-      echo "Stopping review environment: review/$CI_MERGE_REQUEST_IID"
+      echo "Stopping staging environment: staging/$CI_COMMIT_SHORT_SHA"
 
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
 
       echo "Deleting Azure Container App: $REVIEW_APP_NAME" > review-stop-report.txt
 
@@ -546,10 +511,10 @@ stop-review:
           echo "⚠ Deletion returned non-zero exit code (may already be deleted)" >> review-stop-report.txt
         }
       else
-        echo "✓ Review Container App already deleted" >> review-stop-report.txt
+        echo "✓ Staging Container App already deleted" >> review-stop-report.txt
       fi
 
-      echo "Review environment cleanup completed: $(date)" >> review-stop-report.txt
+      echo "Staging environment cleanup completed: $(date)" >> review-stop-report.txt
   artifacts:
     when: always
     paths:
@@ -560,7 +525,7 @@ stop-review:
 # =====================================================
 # DEPLOY TO PRODUCTION
 # =====================================================
-# Production deployments run only on main branch
+# Production deployments run only on tags
 # Requires manual trigger for safety
 
 .deploy_production_base:
@@ -570,8 +535,8 @@ stop-review:
     - job: docker-build
       artifacts: true
   rules:
-    # Only for main branch
-    - if: $CI_COMMIT_REF_NAME == "main"
+    # Only for tagged releases
+    - if: $CI_COMMIT_TAG
       when: manual
   before_script:
     - |
@@ -605,7 +570,7 @@ deploy-production:
       PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
 
       echo "Deploying to production: $PRODUCTION_WEBAPP_NAME" > production-deployment-report.txt
-      echo "Image tag: $IMAGE_TAG" >> production-deployment-report-report.txt
+      echo "Image tag: $IMAGE_TAG" >> production-deployment-report.txt
       echo "Deployment started: $(date)" >> production-deployment-report.txt
     - |
       # Create or update production Container App
@@ -775,13 +740,13 @@ create-version-tag:
       - $VERSION_FILE
     expire_in: 1 day
   rules:
-    # Only for main branch
-    - if: $CI_COMMIT_REF_NAME == "main"
+    # Only when deploying tagged releases
+    - if: $CI_COMMIT_TAG
 
 # =====================================================
 # CLEANUP STAGE - Environment Auto-Stop
 # =====================================================
-# Automatic cleanup of review environments
+# Automatic cleanup of staging environments
 
 cleanup-review:
   stage: cleanup
@@ -799,17 +764,17 @@ cleanup-review:
       az account set --subscription "$AZURE_SUBSCRIPTION_ID"
   script:
     - |
-      echo "Cleaning up review environments..."
+      echo "Cleaning up staging environments..."
 
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-review-${CI_MERGE_REQUEST_IID}"
+      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
 
       if az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-        echo "✓ Deleting orphaned review app: $REVIEW_APP_NAME"
+        echo "✓ Deleting orphaned staging app: $REVIEW_APP_NAME"
         az containerapp delete \
           --name "$REVIEW_APP_NAME" \
           --resource-group "$AZURE_RESOURCE_GROUP" \
           --yes 2>&1 || echo "✓ Already deleted or in deletion process"
       else
-        echo "✓ Review app $REVIEW_APP_NAME not found (already cleaned up)"
+        echo "✓ Staging app $REVIEW_APP_NAME not found (already cleaned up)"
       fi
   allow_failure: true
