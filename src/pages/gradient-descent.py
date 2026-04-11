@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Gradient Descent - Optimierungsverfahren", layout="wide")
+DEFAULT_CONFIG = {
+    "x0": 8.0,
+    "lr": 0.005,
+    "iterations": 15,
+}
 
 st.title("Gradient Descent Visualizer")
 st.caption("Beobachte, wie sich der Startwert mit jedem Schritt in Richtung Minimum bewegt.")
@@ -19,47 +23,93 @@ def df(x):
     return x
 
 
-st.sidebar.subheader("Einstellungen - Gradient Descent")
-x0 = st.sidebar.slider("Startwert x₀", -100.0, 100.0, 8.0, 0.5)
-lr = st.sidebar.slider("Lernrate η", 0.001, 0.5, 0.005, 0.001)
-iterations = st.sidebar.slider("Iterationen", 1, 30, 15)
-animate = st.sidebar.button("Animation starten")
+@st.cache_data(show_spinner=False)
+def build_history(start_x: float, learning_rate: float, iteration_count: int) -> dict[str, object]:
+    x = float(start_x)
+    x_history = [x]
+    warning_message = None
 
-x = x0
-x_history = [x]
-for step_index in range(iterations):
-    grad = df(x)
-    x_new = x - lr * grad
-    if abs(x_new) > 1e6:
-        st.warning(f"Abbruch bei Schritt {step_index}: Gradient explodiert (x={x_new:.2e})")
-        break
-    x = x_new
-    x_history.append(x)
+    for step_index in range(iteration_count):
+        grad = df(x)
+        x_new = x - learning_rate * grad
+        if abs(x_new) > 1e6:
+            warning_message = (
+                f"Abbruch bei Schritt {step_index}: Gradient explodiert (x={x_new:.2e})"
+            )
+            break
+        x = x_new
+        x_history.append(x)
 
-curve_x = np.linspace(min(-10, min(x_history) - 1), max(10, max(x_history) + 1), 400)
-curve_df = pd.DataFrame({"x": curve_x, "y": f(curve_x)})
-history_df = pd.DataFrame(
-    {
-        "step": list(range(len(x_history))),
-        "x": x_history,
-        "y": [f(current_x) for current_x in x_history],
-        "gradient": [df(current_x) for current_x in x_history],
+    curve_x = np.linspace(min(-10, min(x_history) - 1), max(10, max(x_history) + 1), 400)
+    curve_df = pd.DataFrame({"x": curve_x, "y": f(curve_x)})
+    history_df = pd.DataFrame(
+        {
+            "step": list(range(len(x_history))),
+            "x": x_history,
+            "y": [f(current_x) for current_x in x_history],
+            "gradient": [df(current_x) for current_x in x_history],
+        }
+    )
+    return {
+        "curve_df": curve_df,
+        "history_df": history_df,
+        "warning": warning_message,
     }
-)
 
+
+if "gradient_config" not in st.session_state:
+    st.session_state.gradient_config = DEFAULT_CONFIG.copy()
 if "gradient_step" not in st.session_state:
     st.session_state.gradient_step = 0
+if "gradient_is_animating" not in st.session_state:
+    st.session_state.gradient_is_animating = False
 
-selected_step_default = (
-    len(x_history) - 1
-    if animate
-    else min(
-        st.session_state.gradient_step,
-        len(x_history) - 1,
+st.sidebar.subheader("Einstellungen - Gradient Descent")
+with st.sidebar.form("gradient_controls"):
+    x0_input = st.slider(
+        "Startwert x₀", -100.0, 100.0, float(st.session_state.gradient_config["x0"]), 0.5
     )
-)
-selected_step = st.sidebar.slider("Schritt", 0, len(x_history) - 1, selected_step_default)
-st.session_state.gradient_step = selected_step
+    lr_input = st.slider(
+        "Lernrate η", 0.001, 0.5, float(st.session_state.gradient_config["lr"]), 0.001
+    )
+    iterations_input = st.slider(
+        "Iterationen", 1, 30, int(st.session_state.gradient_config["iterations"])
+    )
+    save_config = st.form_submit_button("Verlauf berechnen", type="primary")
+
+start_animation = st.sidebar.button("Animation starten")
+stop_animation = st.sidebar.button("Animation stoppen")
+
+if save_config:
+    st.session_state.gradient_config = {
+        "x0": float(x0_input),
+        "lr": float(lr_input),
+        "iterations": int(iterations_input),
+    }
+    st.session_state.gradient_is_animating = False
+
+config = st.session_state.gradient_config
+history_bundle = build_history(config["x0"], config["lr"], config["iterations"])
+curve_df = history_bundle["curve_df"]
+history_df = history_bundle["history_df"]
+warning_message = history_bundle["warning"]
+max_step = len(history_df) - 1
+
+if save_config:
+    st.session_state.gradient_step = max_step
+st.session_state.gradient_step = min(st.session_state.gradient_step, max_step)
+
+if start_animation:
+    st.session_state.gradient_step = 0
+    st.session_state.gradient_is_animating = True
+if stop_animation:
+    st.session_state.gradient_is_animating = False
+
+st.sidebar.slider("Schritt", 0, max_step, key="gradient_step")
+selected_step = st.session_state.gradient_step
+
+if warning_message:
+    st.warning(str(warning_message))
 
 
 def build_chart(step: int) -> alt.Chart:
@@ -89,13 +139,12 @@ def build_chart(step: int) -> alt.Chart:
     return (curve + trail + current).properties(height=420)
 
 
-chart_placeholder = st.empty()
-if animate:
-    for step in range(len(x_history)):
-        chart_placeholder.altair_chart(build_chart(step), width="stretch")
-        time.sleep(0.18)
-else:
-    chart_placeholder.altair_chart(build_chart(selected_step), width="stretch")
+st.altair_chart(build_chart(selected_step), width="stretch")
+
+if st.session_state.gradient_is_animating:
+    st.info(
+        "Animation laeuft. Die Visualisierung bleibt sichtbar und wird Schritt fuer Schritt aktualisiert."
+    )
 
 current_row = history_df.iloc[selected_step]
 final_row = history_df.iloc[-1]
@@ -120,8 +169,8 @@ st.markdown(r"""
 Diese App visualisiert das **Gradient Descent** Verfahren zur Optimierung einer Funktion.
 
 - Wähle im **Sidebar** den Startwert $x_0$, die Lernrate $\eta$ und die Anzahl der Iterationen.
-- Klicke auf **Animation starten**, um den Schritt-für-Schritt-Verlauf automatisch zu sehen.
-- Alternativ kannst du den Fortschritt mit dem Slider **Schritt** verfolgen.
+- Klicke auf **Verlauf berechnen**, um neue Parameter zu übernehmen.
+- Starte danach die Animation oder bewege den Slider **Schritt** manuell.
 """)
 
 with st.expander("Verlauf der Schritte"):
@@ -151,3 +200,11 @@ $x_{\text{neu}} = x - \\eta \\cdot f'(x)$
 - Der Algorithmus nähert sich Schritt für Schritt dem Minimum der Funktion.
 - Bei $f(x) = 0.5 x^2$ ist das Minimum bei $x = 0$.
 """)
+
+if st.session_state.gradient_is_animating:
+    if st.session_state.gradient_step < max_step:
+        time.sleep(0.14)
+        st.session_state.gradient_step += 1
+        st.rerun()
+    else:
+        st.session_state.gradient_is_animating = False

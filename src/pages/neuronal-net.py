@@ -13,7 +13,12 @@ from utils.neural_network import (
     train_and_network,
 )
 
-st.set_page_config(page_title="Neuronales Netz - Binary AND", layout="wide")
+DEFAULT_TRAINING_CONFIG = {
+    "learning_rate": 0.3,
+    "epochs": 300,
+    "seed": 1,
+}
+
 st.title("Neuronales Netz: Binary AND Operation")
 st.caption("Das Netz kann jetzt trainieren, Snapshots laden und auf kleinere Layouts reagieren.")
 
@@ -50,6 +55,8 @@ if "nn_dark_mode" not in st.session_state:
     st.session_state.nn_dark_mode = True
 if "nn_sim_step" not in st.session_state:
     st.session_state.nn_sim_step = 0
+if "nn_training_config" not in st.session_state:
+    st.session_state.nn_training_config = DEFAULT_TRAINING_CONFIG.copy()
 
 st.sidebar.header("Netzwerk Parameter")
 st.sidebar.write("Binary AND: output = input1 AND input2")
@@ -57,12 +64,38 @@ input1 = st.sidebar.slider("Input 1", 0, 1, 0, step=1)
 input2 = st.sidebar.slider("Input 2", 0, 1, 0, step=1)
 
 st.sidebar.subheader("Training")
-learning_rate = st.sidebar.slider("Lernrate", 0.05, 1.0, 0.3, 0.05)
-epochs = st.sidebar.slider("Epochen", 50, 600, 300, 25)
-seed = st.sidebar.number_input("Seed", min_value=0, max_value=9999, value=1, step=1)
-train_button = st.sidebar.button("Netz trainieren", type="primary")
-reset_button = st.sidebar.button("Neu initialisieren")
+with st.sidebar.form("nn_training_controls"):
+    learning_rate = st.slider(
+        "Lernrate",
+        0.05,
+        1.0,
+        float(st.session_state.nn_training_config["learning_rate"]),
+        0.05,
+    )
+    epochs = st.slider(
+        "Epochen",
+        50,
+        600,
+        int(st.session_state.nn_training_config["epochs"]),
+        25,
+    )
+    seed = st.number_input(
+        "Seed",
+        min_value=0,
+        max_value=9999,
+        value=int(st.session_state.nn_training_config["seed"]),
+        step=1,
+    )
+    train_button = st.form_submit_button("Netz trainieren", type="primary")
+    reset_button = st.form_submit_button("Neu initialisieren")
 st.sidebar.caption("Das Training startet immer mit den aktuellen Gewichten.")
+
+if train_button or reset_button:
+    st.session_state.nn_training_config = {
+        "learning_rate": float(learning_rate),
+        "epochs": int(epochs),
+        "seed": int(seed),
+    }
 
 if reset_button:
     reset_network(int(seed))
@@ -105,33 +138,31 @@ params = load_params()
 
 if manual_mode:
     st.sidebar.subheader("Gewichte")
-    params.weights_hidden[0, 0] = st.sidebar.slider(
-        "W1->H1", -4.0, 4.0, float(params.weights_hidden[0, 0]), 0.1
-    )
-    params.weights_hidden[0, 1] = st.sidebar.slider(
-        "W2->H1", -4.0, 4.0, float(params.weights_hidden[0, 1]), 0.1
-    )
-    params.weights_hidden[1, 0] = st.sidebar.slider(
-        "W1->H2", -4.0, 4.0, float(params.weights_hidden[1, 0]), 0.1
-    )
-    params.weights_hidden[1, 1] = st.sidebar.slider(
-        "W2->H2", -4.0, 4.0, float(params.weights_hidden[1, 1]), 0.1
-    )
-    params.bias_hidden[0] = st.sidebar.slider(
-        "Bias H1", -3.0, 3.0, float(params.bias_hidden[0]), 0.1
-    )
-    params.bias_hidden[1] = st.sidebar.slider(
-        "Bias H2", -3.0, 3.0, float(params.bias_hidden[1]), 0.1
-    )
-    params.weights_output[0] = st.sidebar.slider(
-        "H1->Out", -4.0, 4.0, float(params.weights_output[0]), 0.1
-    )
-    params.weights_output[1] = st.sidebar.slider(
-        "H2->Out", -4.0, 4.0, float(params.weights_output[1]), 0.1
-    )
-    params.bias_output = st.sidebar.slider("Bias Out", -3.0, 3.0, float(params.bias_output), 0.1)
-    store_params(params)
-    st.session_state.nn_loaded_snapshot = -1
+    with st.sidebar.form("nn_manual_weights"):
+        weight_h1_i1 = st.slider("W1->H1", -4.0, 4.0, float(params.weights_hidden[0, 0]), 0.1)
+        weight_h1_i2 = st.slider("W2->H1", -4.0, 4.0, float(params.weights_hidden[0, 1]), 0.1)
+        weight_h2_i1 = st.slider("W1->H2", -4.0, 4.0, float(params.weights_hidden[1, 0]), 0.1)
+        weight_h2_i2 = st.slider("W2->H2", -4.0, 4.0, float(params.weights_hidden[1, 1]), 0.1)
+        bias_h1 = st.slider("Bias H1", -3.0, 3.0, float(params.bias_hidden[0]), 0.1)
+        bias_h2 = st.slider("Bias H2", -3.0, 3.0, float(params.bias_hidden[1]), 0.1)
+        weight_out_h1 = st.slider("H1->Out", -4.0, 4.0, float(params.weights_output[0]), 0.1)
+        weight_out_h2 = st.slider("H2->Out", -4.0, 4.0, float(params.weights_output[1]), 0.1)
+        bias_out = st.slider("Bias Out", -3.0, 3.0, float(params.bias_output), 0.1)
+        apply_manual_weights = st.form_submit_button("Gewichte anwenden")
+
+    if apply_manual_weights:
+        params.weights_hidden[0, 0] = weight_h1_i1
+        params.weights_hidden[0, 1] = weight_h1_i2
+        params.weights_hidden[1, 0] = weight_h2_i1
+        params.weights_hidden[1, 1] = weight_h2_i2
+        params.bias_hidden[0] = bias_h1
+        params.bias_hidden[1] = bias_h2
+        params.weights_output[0] = weight_out_h1
+        params.weights_output[1] = weight_out_h2
+        params.bias_output = bias_out
+        store_params(params)
+        st.session_state.nn_loaded_snapshot = -1
+        params = load_params()
 
 dark_mode = st.sidebar.checkbox("Dark mode", value=st.session_state.nn_dark_mode)
 st.session_state.nn_dark_mode = dark_mode
@@ -412,7 +443,7 @@ with side_col:
         }
     )
     st.write("**Hidden Layer**")
-    st.dataframe(hidden_df, width="stretch", hide_index=True)
+    st.table(hidden_df)
 
     st.write("**Output Layer**")
     st.latex(
@@ -427,7 +458,7 @@ st.subheader("Truth Table - Binary AND")
 truth_col, expected_col = st.columns(2, gap="large")
 with truth_col:
     st.write("**Netzwerk Output**")
-    st.dataframe(pd.DataFrame(truth_table["rows"]), width="stretch", hide_index=True)
+    st.table(pd.DataFrame(truth_table["rows"]))
 with expected_col:
     st.write("**Erwartete Wahrheitstabelle**")
     expected_rows = [
@@ -436,7 +467,7 @@ with expected_col:
         {"Input 1": 1, "Input 2": 0, "Expected": 0},
         {"Input 1": 1, "Input 2": 1, "Expected": 1},
     ]
-    st.dataframe(pd.DataFrame(expected_rows), width="stretch", hide_index=True)
+    st.table(pd.DataFrame(expected_rows))
 
 st.subheader("Anleitung")
 st.markdown(

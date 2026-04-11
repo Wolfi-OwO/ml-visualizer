@@ -5,7 +5,12 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Perceptron Visualizer", layout="wide")
+DEFAULT_CONFIG = {
+    "lr": 0.3,
+    "epochs": 5,
+    "seed": 42,
+    "animate": True,
+}
 
 st.title("Perceptron - Interaktive Lernvisualisierung")
 st.caption(
@@ -16,18 +21,13 @@ X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y = np.array([0, 0, 0, 1])
 
 st.sidebar.header("Einstellungen")
-lr = st.sidebar.slider("Lernrate η", 0.01, 1.0, 0.3, 0.01)
-epochs = st.sidebar.slider("Epochen", 1, 20, 5)
-seed = st.sidebar.number_input("Seed", min_value=0, max_value=9999, value=42, step=1)
-animate = st.sidebar.checkbox("Training animieren", value=True)
-start = st.sidebar.button("Training starten", type="primary")
-stop_animation = st.sidebar.button("Animation stoppen")
 
 
 def predict_labels(weights: np.ndarray, bias: float) -> np.ndarray:
     return (np.dot(X, weights) + bias >= 0).astype(int)
 
 
+@st.cache_data(show_spinner=False)
 def build_history(
     learning_rate: float, epoch_count: int, random_seed: int
 ) -> list[dict[str, object]]:
@@ -103,36 +103,61 @@ def build_boundary_chart(snapshot: dict[str, object]) -> alt.LayerChart:
     return (points + boundary).properties(height=420)
 
 
-history = build_history(lr, epochs, int(seed))
-max_step = len(history) - 1
-
-config = (round(float(lr), 4), int(epochs), int(seed))
-
+if "perceptron_config" not in st.session_state:
+    st.session_state.perceptron_config = DEFAULT_CONFIG.copy()
 if "perceptron_current_step" not in st.session_state:
     st.session_state.perceptron_current_step = 0
 if "perceptron_is_animating" not in st.session_state:
     st.session_state.perceptron_is_animating = False
-if "perceptron_last_config" not in st.session_state:
-    st.session_state.perceptron_last_config = config
+if "perceptron_start_requested" not in st.session_state:
+    st.session_state.perceptron_start_requested = False
 
-if st.session_state.perceptron_last_config != config:
-    st.session_state.perceptron_last_config = config
-    st.session_state.perceptron_current_step = min(
-        st.session_state.perceptron_current_step, max_step
+with st.sidebar.form("perceptron_controls"):
+    lr_input = st.slider(
+        "Lernrate η", 0.01, 1.0, float(st.session_state.perceptron_config["lr"]), 0.01
     )
-    st.session_state.perceptron_is_animating = False
+    epochs_input = st.slider("Epochen", 1, 20, int(st.session_state.perceptron_config["epochs"]))
+    seed_input = st.number_input(
+        "Seed",
+        min_value=0,
+        max_value=9999,
+        value=int(st.session_state.perceptron_config["seed"]),
+        step=1,
+    )
+    animate_input = st.checkbox(
+        "Training animieren",
+        value=bool(st.session_state.perceptron_config["animate"]),
+    )
+    start = st.form_submit_button("Training starten", type="primary")
+
+stop_animation = st.sidebar.button("Animation stoppen")
 
 if start:
-    if animate:
+    st.session_state.perceptron_config = {
+        "lr": float(lr_input),
+        "epochs": int(epochs_input),
+        "seed": int(seed_input),
+        "animate": bool(animate_input),
+    }
+    st.session_state.perceptron_start_requested = True
+
+config = st.session_state.perceptron_config
+history = build_history(config["lr"], config["epochs"], config["seed"])
+max_step = len(history) - 1
+
+if st.session_state.perceptron_start_requested:
+    if config["animate"]:
         st.session_state.perceptron_current_step = 0
         st.session_state.perceptron_is_animating = True
     else:
         st.session_state.perceptron_current_step = max_step
         st.session_state.perceptron_is_animating = False
+    st.session_state.perceptron_start_requested = False
 
 if stop_animation:
     st.session_state.perceptron_is_animating = False
 
+st.session_state.perceptron_current_step = min(st.session_state.perceptron_current_step, max_step)
 st.sidebar.slider("Trainingsschritt", 0, max_step, key="perceptron_current_step")
 snapshot = history[st.session_state.perceptron_current_step]
 
@@ -165,7 +190,7 @@ truth_table = pd.DataFrame(
 )
 
 st.subheader("Aktuelle Vorhersagen")
-st.dataframe(truth_table, width="stretch", hide_index=True)
+st.table(truth_table)
 
 st.subheader("Anleitung")
 st.markdown(

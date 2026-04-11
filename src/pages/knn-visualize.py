@@ -5,7 +5,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="K-Nearest-Neighbors Algorithm", layout="wide")
+DEFAULT_KNN_SETTINGS = {
+    "k": 3,
+    "animate": False,
+}
 
 st.title("KNN (K-Nearest Neighbors) Visualizer")
 st.caption("Fuege Punkte hinzu und klassifiziere alle offenen Punkte mit einem Klick.")
@@ -22,10 +25,27 @@ def seeded_points() -> tuple[list[tuple[float, float, str]], list[tuple[float, f
 
 def ensure_state() -> None:
     if "knn_points" not in st.session_state:
-        points, unclassified = seeded_points()
-        st.session_state.knn_points = points
-        st.session_state.knn_unclassified_points = unclassified
-        st.session_state.knn_animation_running = False
+        reset_points()
+    if "knn_animation_queue" not in st.session_state:
+        st.session_state.knn_animation_queue = []
+    if "knn_animation_neighbor_count" not in st.session_state:
+        st.session_state.knn_animation_neighbor_count = 0
+    if "knn_animation_k" not in st.session_state:
+        st.session_state.knn_animation_k = DEFAULT_KNN_SETTINGS["k"]
+    if "knn_settings" not in st.session_state:
+        st.session_state.knn_settings = DEFAULT_KNN_SETTINGS.copy()
+    if "knn_last_results" not in st.session_state:
+        st.session_state.knn_last_results = []
+
+
+def reset_points() -> None:
+    points, unclassified = seeded_points()
+    st.session_state.knn_points = points
+    st.session_state.knn_unclassified_points = unclassified
+    st.session_state.knn_animation_running = False
+    st.session_state.knn_animation_queue = []
+    st.session_state.knn_animation_neighbor_count = 0
+    st.session_state.knn_last_results = []
 
 
 def build_knn_chart(
@@ -119,61 +139,65 @@ def build_knn_chart(
     )
 
 
-def classify_points(
-    k_neighbors: int, animate_steps: bool, chart_placeholder
-) -> list[tuple[float, float, str]]:
+def resolve_point(
+    x_value: float, y_value: float, k_neighbors: int
+) -> tuple[str, list[tuple[float, float, str]]]:
+    distances = [
+        (np.hypot(px - x_value, py - y_value), label, px, py)
+        for px, py, label in st.session_state.knn_points
+    ]
+    distances.sort(key=lambda item: item[0])
+    nearest_neighbors = [(px, py, label) for _, label, px, py in distances[:k_neighbors]]
+    nearest_labels = [label for _, _, label in nearest_neighbors]
+    unique_labels, counts = np.unique(nearest_labels, return_counts=True)
+    predicted_label = str(unique_labels[counts.argmax()])
+    return predicted_label, nearest_neighbors
+
+
+def classify_points(k_neighbors: int) -> list[tuple[float, float, str]]:
     pending_points = list(st.session_state.knn_unclassified_points)
     resolved_points: list[tuple[float, float, str]] = []
-    st.session_state.knn_animation_running = True
 
     for x_value, y_value in pending_points:
-        distances = [
-            (np.hypot(px - x_value, py - y_value), label, px, py)
-            for px, py, label in st.session_state.knn_points
-        ]
-        distances.sort(key=lambda item: item[0])
-
-        if animate_steps:
-            for neighbor_count in range(1, k_neighbors + 1):
-                current_neighbors = [
-                    (px, py, label) for _, label, px, py in distances[:neighbor_count]
-                ]
-                chart_placeholder.altair_chart(
-                    build_knn_chart(
-                        st.session_state.knn_points,
-                        [],
-                        neighbors=current_neighbors,
-                        highlight_point=(x_value, y_value, "?"),
-                    ),
-                    width="stretch",
-                )
-                time.sleep(0.2)
-
-        nearest_labels = [label for _, label, _, _ in distances[:k_neighbors]]
-        unique_labels, counts = np.unique(nearest_labels, return_counts=True)
-        predicted_label = str(unique_labels[counts.argmax()])
-
+        predicted_label, _ = resolve_point(x_value, y_value, k_neighbors)
         st.session_state.knn_points.append((x_value, y_value, predicted_label))
         resolved_points.append((x_value, y_value, predicted_label))
 
     st.session_state.knn_unclassified_points = []
-    st.session_state.knn_animation_running = False
+    st.session_state.knn_last_results = resolved_points
     return resolved_points
+
+
+def start_animation(k_neighbors: int) -> None:
+    st.session_state.knn_animation_running = True
+    st.session_state.knn_animation_k = k_neighbors
+    st.session_state.knn_animation_queue = list(st.session_state.knn_unclassified_points)
+    st.session_state.knn_unclassified_points = []
+    st.session_state.knn_animation_neighbor_count = 1
+    st.session_state.knn_last_results = []
 
 
 ensure_state()
 
 st.sidebar.subheader("Einstellungen - KNN")
-k = st.sidebar.slider("Anzahl der Nachbarn k", 1, 15, 3)
-animate = st.sidebar.checkbox("Klassifikation animieren", value=False)
-classify_button = st.sidebar.button("Klassifikation starten", type="primary")
+with st.sidebar.form("knn_controls"):
+    k = st.slider("Anzahl der Nachbarn k", 1, 15, int(st.session_state.knn_settings["k"]))
+    animate = st.checkbox(
+        "Klassifikation animieren",
+        value=bool(st.session_state.knn_settings["animate"]),
+    )
+    classify_button = st.form_submit_button("Klassifikation starten", type="primary")
 reset_button = st.sidebar.button("Alle Punkte zuruecksetzen")
+stop_animation = st.sidebar.button("Animation stoppen")
 
 if reset_button:
-    points, unclassified = seeded_points()
-    st.session_state.knn_points = points
-    st.session_state.knn_unclassified_points = unclassified
+    reset_points()
+
+if stop_animation and st.session_state.knn_animation_running:
+    st.session_state.knn_unclassified_points = list(st.session_state.knn_animation_queue)
     st.session_state.knn_animation_running = False
+    st.session_state.knn_animation_queue = []
+    st.session_state.knn_animation_neighbor_count = 0
 
 left_col, right_col = st.columns([1, 2], gap="large")
 
@@ -216,6 +240,10 @@ if add_point_button and not st.session_state.knn_animation_running:
         )
 
 if classify_button:
+    st.session_state.knn_settings = {
+        "k": int(k),
+        "animate": bool(animate),
+    }
     if not st.session_state.knn_unclassified_points:
         st.info("Keine neuen Punkte zum Klassifizieren vorhanden.")
     elif len(st.session_state.knn_points) < k:
@@ -223,15 +251,33 @@ if classify_button:
             "Nicht genug klassifizierte Punkte fuer KNN "
             f"(benoetigt: {k}, vorhanden: {len(st.session_state.knn_points)})."
         )
+    elif animate:
+        start_animation(k)
     else:
-        resolved_points = classify_points(k, animate, chart_placeholder)
+        resolved_points = classify_points(k)
         for x_value, y_value, label in resolved_points:
             st.success(f"Punkt ({x_value:.2f}, {y_value:.2f}) -> Klasse {label}")
 
-chart_placeholder.altair_chart(
-    build_knn_chart(st.session_state.knn_points, st.session_state.knn_unclassified_points),
-    width="stretch",
-)
+if st.session_state.knn_animation_running and st.session_state.knn_animation_queue:
+    current_point = st.session_state.knn_animation_queue[0]
+    _, nearest_neighbors = resolve_point(
+        current_point[0], current_point[1], st.session_state.knn_animation_k
+    )
+    visible_neighbors = nearest_neighbors[: st.session_state.knn_animation_neighbor_count]
+    chart_placeholder.altair_chart(
+        build_knn_chart(
+            st.session_state.knn_points,
+            list(st.session_state.knn_animation_queue[1:]),
+            neighbors=visible_neighbors,
+            highlight_point=(current_point[0], current_point[1], "?"),
+        ),
+        width="stretch",
+    )
+else:
+    chart_placeholder.altair_chart(
+        build_knn_chart(st.session_state.knn_points, st.session_state.knn_unclassified_points),
+        width="stretch",
+    )
 
 metric_col1, metric_col2, metric_col3 = st.columns(3)
 with metric_col1:
@@ -239,13 +285,31 @@ with metric_col1:
 with metric_col2:
     st.metric("Klasse B", sum(label == "B" for _, _, label in st.session_state.knn_points))
 with metric_col3:
-    st.metric("Offene Punkte", len(st.session_state.knn_unclassified_points))
+    st.metric(
+        "Offene Punkte",
+        len(st.session_state.knn_unclassified_points) + len(st.session_state.knn_animation_queue),
+    )
 
 st.markdown(
     "**Legende:** Blau = Klasse A, Orange = Klasse B, Grau = offen, Gelb = aktuelle Nachbarn"
 )
-if st.session_state.knn_unclassified_points:
+if st.session_state.knn_animation_running:
+    st.info(
+        "Animation laeuft. Die Nachbarn werden ohne kompletten Seiten-Block Schritt fuer Schritt angezeigt."
+    )
+elif st.session_state.knn_unclassified_points:
     st.info(f"{len(st.session_state.knn_unclassified_points)} Punkt(e) warten auf Klassifikation.")
+
+if st.session_state.knn_last_results:
+    st.subheader("Letzte Klassifikationen")
+    st.table(
+        pd.DataFrame(
+            [
+                {"x": round(x_value, 3), "y": round(y_value, 3), "Klasse": label}
+                for x_value, y_value, label in st.session_state.knn_last_results
+            ]
+        )
+    )
 
 st.subheader("Anleitung")
 st.markdown(
@@ -269,3 +333,30 @@ with st.expander("Erklaerung zum KNN"):
 Der Algorithmus braucht kein separates Training. Er nutzt direkt die vorhandenen Datenpunkte.
         """
     )
+
+if st.session_state.knn_animation_running and st.session_state.knn_animation_queue:
+    current_point = st.session_state.knn_animation_queue[0]
+    predicted_label, nearest_neighbors = resolve_point(
+        current_point[0],
+        current_point[1],
+        st.session_state.knn_animation_k,
+    )
+    max_neighbors = min(st.session_state.knn_animation_k, len(nearest_neighbors))
+
+    if st.session_state.knn_animation_neighbor_count < max_neighbors:
+        time.sleep(0.14)
+        st.session_state.knn_animation_neighbor_count += 1
+        st.rerun()
+    else:
+        st.session_state.knn_points.append((current_point[0], current_point[1], predicted_label))
+        st.session_state.knn_last_results.append(
+            (current_point[0], current_point[1], predicted_label)
+        )
+        st.session_state.knn_animation_queue = st.session_state.knn_animation_queue[1:]
+        if st.session_state.knn_animation_queue:
+            st.session_state.knn_animation_neighbor_count = 1
+            time.sleep(0.12)
+            st.rerun()
+        else:
+            st.session_state.knn_animation_running = False
+            st.session_state.knn_animation_neighbor_count = 0
