@@ -1,42 +1,45 @@
-import os
-import sys
+from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
 
 from utils import get_config, get_version
 
-# Add src to Python path if running from root
-if os.path.exists("src"):
-    print("Setting path to /src")
-    sys.path.insert(0, "src")
+SRC_DIR = Path(__file__).resolve().parent
+
+
+def load_stylesheet(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
 # --- CONFIG ---
 st.set_page_config(
     page_title="ML Visualizer - Interactive Machine Learning Diagrams",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# Load CSS - handle both local and docker paths
-css_base = "./src/styles" if os.path.exists("./src/styles") else "./styles"
-st.markdown("<style>" + open(f"{css_base}/sidebar.css").read() + "</style>", unsafe_allow_html=True)
-st.markdown("<style>" + open(f"{css_base}/index.css").read() + "</style>", unsafe_allow_html=True)
+styles_dir = SRC_DIR / "styles"
+for stylesheet in ("sidebar.css", "index.css"):
+    st.markdown(
+        f"<style>{load_stylesheet(styles_dir / stylesheet)}</style>",
+        unsafe_allow_html=True,
+    )
 
 
 # Get application version
 APP_VERSION = get_version()
 ENVIRONMENT = get_config("ENVIRONMENT_NAME", "development")
 
-# Determine pages directory
-pages_dir = "pages"
+pages_dir = SRC_DIR / "pages"
 
 # Define pages
 pages = [
-    st.Page(f"./{pages_dir}/homepage.py", title="Startseite"),
-    st.Page(f"./{pages_dir}/gradient-descent.py", title="Gradient Descent"),
-    st.Page(f"./{pages_dir}/perceptron.py", title="Perceptron"),
-    st.Page(f"./{pages_dir}/knn-visualize.py", title="KNN Visualizer"),
-    st.Page(f"./{pages_dir}/neuronal-net.py", title="Neuronal Network"),
+    st.Page(str(pages_dir / "homepage.py"), title="Startseite"),
+    st.Page(str(pages_dir / "gradient-descent.py"), title="Gradient Descent"),
+    st.Page(str(pages_dir / "perceptron.py"), title="Perceptron"),
+    st.Page(str(pages_dir / "knn-visualize.py"), title="KNN Visualizer"),
+    st.Page(str(pages_dir / "neuronal-net.py"), title="Neural Network"),
 ]
 
 
@@ -49,7 +52,11 @@ pg.run()
 st.markdown("---")
 
 # Footer
-footer_text = f'<span> Copyright © 2025 <a href="mailto:koflerphillip@gmail.com">Kofler Phillip</a>, HTL Villach - Informatik ({APP_VERSION})'
+footer_text = (
+    f"<span>Copyright © {datetime.now().year} "
+    f'<a href="mailto:koflerphillip@gmail.com">Kofler Phillip</a>, '
+    f"HTL Villach - Informatik ({APP_VERSION})"
+)
 if ENVIRONMENT != "production":
     footer_text += f" - {ENVIRONMENT.upper()}"
 footer_text += "</span>"

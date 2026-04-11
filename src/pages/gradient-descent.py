@@ -8,18 +8,9 @@ import streamlit as st
 st.set_page_config(page_title="Gradient Descent - Optimierungsverfahren", layout="wide")
 
 st.title("Gradient Descent Visualizer")
-
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.write("Wir betrachten die Funktion:")
-    st.latex(r"f(x) = \frac{1}{2} x^2")
-
-    st.write("und ihren Gradienten:")
-    st.latex(r"f'(x) = x")
+st.caption("Beobachte, wie sich der Startwert mit jedem Schritt in Richtung Minimum bewegt.")
 
 
-# Funktion und Ableitung
 def f(x):
     return 0.5 * x**2
 
@@ -28,70 +19,101 @@ def df(x):
     return x
 
 
-# Sidebar-Parameter
 st.sidebar.subheader("Einstellungen - Gradient Descent")
 x0 = st.sidebar.slider("Startwert x₀", -100.0, 100.0, 8.0, 0.5)
 lr = st.sidebar.slider("Lernrate η", 0.001, 0.5, 0.005, 0.001)
 iterations = st.sidebar.slider("Iterationen", 1, 30, 15)
 animate = st.sidebar.button("Animation starten")
 
-# Berechnung
 x = x0
 x_history = [x]
-for i in range(iterations):
+for step_index in range(iterations):
     grad = df(x)
     x_new = x - lr * grad
     if abs(x_new) > 1e6:
-        st.warning(f"Abbruch bei Schritt {i}: Gradient explodiert (x={x_new:.2e})")
+        st.warning(f"Abbruch bei Schritt {step_index}: Gradient explodiert (x={x_new:.2e})")
         break
     x = x_new
     x_history.append(x)
 
-placeholder = st.empty()
-x_min = min(-10, min(x_history) - 1)
-x_max = max(10, max(x_history) + 1)
-x_vals = np.linspace(x_min, x_max, 400)
-y_vals = f(x_vals)
-df_func = pd.DataFrame({"x": x_vals, "y": y_vals})
+curve_x = np.linspace(min(-10, min(x_history) - 1), max(10, max(x_history) + 1), 400)
+curve_df = pd.DataFrame({"x": curve_x, "y": f(curve_x)})
+history_df = pd.DataFrame(
+    {
+        "step": list(range(len(x_history))),
+        "x": x_history,
+        "y": [f(current_x) for current_x in x_history],
+        "gradient": [df(current_x) for current_x in x_history],
+    }
+)
 
-with col2:
+if "gradient_step" not in st.session_state:
+    st.session_state.gradient_step = 0
 
-    def plot_altair(step):
-        # Verlauf der Gradientenpunkte
-        df_points = pd.DataFrame(
-            {
-                "x": x_history[: step + 1],
-                "y": [f(x) for x in x_history[: step + 1]],
-                "step": list(range(step + 1)),
-            }
+selected_step_default = (
+    len(x_history) - 1
+    if animate
+    else min(
+        st.session_state.gradient_step,
+        len(x_history) - 1,
+    )
+)
+selected_step = st.sidebar.slider("Schritt", 0, len(x_history) - 1, selected_step_default)
+st.session_state.gradient_step = selected_step
+
+
+def build_chart(step: int) -> alt.Chart:
+    visible_history = history_df.iloc[: step + 1]
+
+    curve = (
+        alt.Chart(curve_df)
+        .mark_line(color="#2563eb", strokeWidth=3)
+        .encode(
+            x=alt.X("x:Q", title="x"),
+            y=alt.Y("y:Q", title="f(x)"),
         )
+    )
 
-        # Linie der Funktion
-        base = alt.Chart(df_func).mark_line(color="blue").encode(x="x", y="y")
+    trail = (
+        alt.Chart(visible_history)
+        .mark_circle(color="#ef4444", size=90)
+        .encode(x="x:Q", y="y:Q", tooltip=["step", "x", "y", "gradient"])
+    )
 
-        # Schritte als rote Punkte
-        points = alt.Chart(df_points).mark_circle(color="red", size=100).encode(x="x", y="y")
+    current = (
+        alt.Chart(visible_history.tail(1))
+        .mark_circle(color="#22c55e", size=220)
+        .encode(x="x:Q", y="y:Q", tooltip=["step", "x", "y", "gradient"])
+    )
 
-        # Aktueller Punkt als grüner Punkt
-        current = (
-            alt.Chart(df_points.iloc[[-1]]).mark_circle(color="lime", size=200).encode(x="x", y="y")
-        )
-
-        chart = base + points + current
-        st.altair_chart(chart, width="stretch")
-
-    if animate:
-        placeholder = st.empty()  # Placeholder für die Animation
-        for step in range(len(x_history)):
-            with placeholder.container():  # Überschreibt den vorherigen Chart
-                plot_altair(step)
-            time.sleep(0.25)
-    else:
-        step = st.slider("Manueller Schritt", 0, len(x_history) - 1, 0)
-        plot_altair(step)
+    return (curve + trail + current).properties(height=420)
 
 
-st.success(f"Aktueller Punkt: x ≈ {x_history[-1]:.4f}, f(x) = {f(x_history[-1]):.4f}")
+chart_placeholder = st.empty()
+if animate:
+    for step in range(len(x_history)):
+        chart_placeholder.altair_chart(build_chart(step), width="stretch")
+        time.sleep(0.18)
+else:
+    chart_placeholder.altair_chart(build_chart(selected_step), width="stretch")
+
+current_row = history_df.iloc[selected_step]
+final_row = history_df.iloc[-1]
+
+formula_col, current_col, final_col = st.columns(3)
+with formula_col:
+    st.write("Wir betrachten die Funktion:")
+    st.latex(r"f(x) = \frac{1}{2} x^2")
+    st.write("und ihren Gradienten:")
+    st.latex(r"f'(x) = x")
+with current_col:
+    st.metric("Aktueller Schritt", int(current_row["step"]))
+    st.metric("x", f"{current_row['x']:.4f}")
+    st.metric("f(x)", f"{current_row['y']:.4f}")
+with final_col:
+    st.metric("Finales x", f"{final_row['x']:.4f}")
+    st.metric("Finales f(x)", f"{final_row['y']:.4f}")
+    st.metric("Finaler Gradient", f"{final_row['gradient']:.4f}")
 
 st.subheader("Erklärung")
 st.markdown(r"""
@@ -99,13 +121,12 @@ Diese App visualisiert das **Gradient Descent** Verfahren zur Optimierung einer 
 
 - Wähle im **Sidebar** den Startwert $x_0$, die Lernrate $\eta$ und die Anzahl der Iterationen.
 - Klicke auf **Animation starten**, um den Schritt-für-Schritt-Verlauf automatisch zu sehen.
-- Alternativ kannst du den Fortschritt manuell mit dem Slider "Manueller Schritt" verfolgen.
+- Alternativ kannst du den Fortschritt mit dem Slider **Schritt** verfolgen.
 """)
 
+with st.expander("Verlauf der Schritte"):
+    st.dataframe(history_df.round(4), width="stretch", hide_index=True)
 
-# --------------------------------------------------
-# Explanation
-# --------------------------------------------------
 with st.expander("Erklärung zum Gradient Descent"):
     st.write("""
 Gradient Descent (deutsch: Gradientenabstieg) ist ein Optimierungsverfahren, das häufig in der Mathematik, Statistik und im Machine Learning verwendet wird, um das Minimum einer Funktion zu finden.
@@ -129,6 +150,4 @@ $x_{\text{neu}} = x - \\eta \\cdot f'(x)$
 **Ziel:**
 - Der Algorithmus nähert sich Schritt für Schritt dem Minimum der Funktion.
 - Bei $f(x) = 0.5 x^2$ ist das Minimum bei $x = 0$.
-
-Durch das Anpassen der Parameter kannst du beobachten, wie sich Startwert und Lernrate auf die Geschwindigkeit und Stabilität des Verfahrens auswirken.
 """)

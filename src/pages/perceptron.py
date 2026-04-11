@@ -5,282 +5,208 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-# --------------------------------------------------
-# Page Config
-# --------------------------------------------------
-st.set_page_config(
-    page_title="Perceptron Visualizer",
-    layout="wide",
-)
+st.set_page_config(page_title="Perceptron Visualizer", layout="wide")
 
 st.title("Perceptron - Interaktive Lernvisualisierung")
-
-st.markdown(
-    """
-    Ein **Perceptron** ist das einfachste neuronale Netzwerk.
-    Es lernt eine **lineare Entscheidungsgrenze**.
-    """
+st.caption(
+    "Trainiere das Perceptron auf der AND-Wahrheitstabelle und verfolge jeden Update-Schritt."
 )
 
-# --------------------------------------------------
-# Sidebar
-# --------------------------------------------------
-st.sidebar.header("Einstellungen")
-
-lr = st.sidebar.slider("Lernrate η", 0.01, 1.0, 0.3, 0.01)
-epochs = st.sidebar.slider("Epochen", 1, 20, 5)
-start = st.sidebar.button("▶ Training starten")
-
-# --------------------------------------------------
-# Data (AND)
-# --------------------------------------------------
 X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y = np.array([0, 0, 0, 1])
 
-# --------------------------------------------------
-# Training
-# --------------------------------------------------
-np.random.seed(42)
-w = np.random.uniform(-1, 1, 2)
-b = np.random.uniform(-1, 1)
-
-history = [(w.copy(), b)]
-
-for _ in range(epochs):
-    for i in range(len(X)):
-        z = np.dot(X[i], w) + b
-        y_hat = 1 if z > 0 else 0
-        error = y[i] - y_hat
-        w += lr * error * X[i]
-        b += lr * error
-        history.append((w.copy(), b))
+st.sidebar.header("Einstellungen")
+lr = st.sidebar.slider("Lernrate η", 0.01, 1.0, 0.3, 0.01)
+epochs = st.sidebar.slider("Epochen", 1, 20, 5)
+seed = st.sidebar.number_input("Seed", min_value=0, max_value=9999, value=42, step=1)
+animate = st.sidebar.checkbox("Training animieren", value=True)
+start = st.sidebar.button("Training starten", type="primary")
+stop_animation = st.sidebar.button("Animation stoppen")
 
 
-# --------------------------------------------------
-# Plot function
-# --------------------------------------------------
-def plot_decision_boundary(weights, bias):
-    x_vals = np.linspace(-0.2, 1.2, 100)
-    y_vals = -(weights[0] * x_vals + bias) / weights[1]
+def predict_labels(weights: np.ndarray, bias: float) -> np.ndarray:
+    return (np.dot(X, weights) + bias >= 0).astype(int)
 
-    df_line = pd.DataFrame({"x": x_vals, "y": y_vals})
 
-    df_points = pd.DataFrame(X, columns=["x", "y"])
-    df_points["class"] = y.astype(str)
+def build_history(
+    learning_rate: float, epoch_count: int, random_seed: int
+) -> list[dict[str, object]]:
+    rng = np.random.default_rng(random_seed)
+    weights = rng.uniform(-1.0, 1.0, size=2)
+    bias = float(rng.uniform(-1.0, 1.0))
+    history: list[dict[str, object]] = []
+
+    def snapshot(step: int, epoch: int, sample_index: int) -> None:
+        predictions = predict_labels(weights, bias)
+        history.append(
+            {
+                "step": step,
+                "epoch": epoch,
+                "sample_index": sample_index,
+                "weights": weights.copy(),
+                "bias": float(bias),
+                "predictions": predictions,
+                "accuracy": float(np.mean(predictions == y)),
+            }
+        )
+
+    snapshot(step=0, epoch=0, sample_index=-1)
+    step = 1
+
+    for epoch in range(1, epoch_count + 1):
+        for sample_index, features in enumerate(X):
+            raw = float(np.dot(features, weights) + bias)
+            prediction = 1 if raw >= 0 else 0
+            error = y[sample_index] - prediction
+            weights = weights + learning_rate * error * features
+            bias = float(bias + learning_rate * error)
+            snapshot(step=step, epoch=epoch, sample_index=sample_index)
+            step += 1
+
+    return history
+
+
+def build_boundary_chart(snapshot: dict[str, object]) -> alt.LayerChart:
+    weights = np.asarray(snapshot["weights"], dtype=float)
+    bias = float(snapshot["bias"])
+
+    points_df = pd.DataFrame(X, columns=["x", "y"])
+    points_df["class"] = y.astype(str)
+    points_df["prediction"] = np.asarray(snapshot["predictions"], dtype=int).astype(str)
 
     points = (
-        alt.Chart(df_points)
-        .mark_circle(size=200)
+        alt.Chart(points_df)
+        .mark_circle(size=220)
         .encode(
-            x="x", y="y", color=alt.Color("class:N", scale=alt.Scale(range=["#ff7f0e", "#1f77b4"]))
+            x=alt.X("x:Q", scale=alt.Scale(domain=[-0.2, 1.2]), title="x₁"),
+            y=alt.Y("y:Q", scale=alt.Scale(domain=[-0.2, 1.2]), title="x₂"),
+            color=alt.Color("class:N", scale=alt.Scale(range=["#f97316", "#2563eb"])),
+            tooltip=["x", "y", "class", "prediction"],
         )
     )
 
-    line = alt.Chart(df_line).mark_line(color="black").encode(x="x", y="y")
+    if abs(weights[1]) > 1e-9:
+        x_values = np.linspace(-0.2, 1.2, 100)
+        y_values = -(weights[0] * x_values + bias) / weights[1]
+        line_df = pd.DataFrame({"x": x_values, "y": y_values})
+        boundary = alt.Chart(line_df).mark_line(color="#111827", strokeWidth=3).encode(x="x", y="y")
+    elif abs(weights[0]) > 1e-9:
+        x_boundary = -bias / weights[0]
+        boundary = (
+            alt.Chart(pd.DataFrame({"x": [x_boundary]}))
+            .mark_rule(color="#111827", strokeWidth=3)
+            .encode(x="x:Q")
+        )
+    else:
+        boundary = alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_line()
 
-    return (points + line).properties(width=600, height=400)
+    return (points + boundary).properties(height=420)
 
 
-# --------------------------------------------------
-# Layout
-# --------------------------------------------------
-left, right = st.columns([1, 2])
+history = build_history(lr, epochs, int(seed))
+max_step = len(history) - 1
 
-with right:
-    plot_placeholder = st.empty()
+config = (round(float(lr), 4), int(epochs), int(seed))
 
-with left:
-    state_box = st.empty()
+if "perceptron_current_step" not in st.session_state:
+    st.session_state.perceptron_current_step = 0
+if "perceptron_is_animating" not in st.session_state:
+    st.session_state.perceptron_is_animating = False
+if "perceptron_last_config" not in st.session_state:
+    st.session_state.perceptron_last_config = config
 
-# --------------------------------------------------
-# Visualization
-# --------------------------------------------------
+if st.session_state.perceptron_last_config != config:
+    st.session_state.perceptron_last_config = config
+    st.session_state.perceptron_current_step = min(
+        st.session_state.perceptron_current_step, max_step
+    )
+    st.session_state.perceptron_is_animating = False
+
 if start:
-    for step, (w, b) in enumerate(history):
-        plot_placeholder.altair_chart(
-            plot_decision_boundary(w, b),
-            width="stretch",
-        )
-        state_box.info(f"Schritt {step}\n\nw₁={w[0]:.2f}\nw₂={w[1]:.2f}\nBias={b:.2f}")
-        time.sleep(0.4)
-else:
-    plot_placeholder.altair_chart(
-        plot_decision_boundary(w, b),
-        width="stretch",
+    if animate:
+        st.session_state.perceptron_current_step = 0
+        st.session_state.perceptron_is_animating = True
+    else:
+        st.session_state.perceptron_current_step = max_step
+        st.session_state.perceptron_is_animating = False
+
+if stop_animation:
+    st.session_state.perceptron_is_animating = False
+
+st.sidebar.slider("Trainingsschritt", 0, max_step, key="perceptron_current_step")
+snapshot = history[st.session_state.perceptron_current_step]
+
+st.altair_chart(build_boundary_chart(snapshot), width="stretch")
+
+if st.session_state.perceptron_is_animating:
+    st.info(
+        "Animation läuft. Die Visualisierung bleibt sichtbar und springt Schritt für Schritt weiter."
     )
+
+metric_col1, metric_col2, metric_col3 = st.columns(3)
+with metric_col1:
+    st.metric("Aktueller Schritt", int(snapshot["step"]))
+    st.metric("Epoche", int(snapshot["epoch"]))
+with metric_col2:
+    weights = np.asarray(snapshot["weights"], dtype=float)
+    st.metric("w₁", f"{weights[0]:.3f}")
+    st.metric("w₂", f"{weights[1]:.3f}")
+with metric_col3:
+    st.metric("Bias", f"{float(snapshot['bias']):.3f}")
+    st.metric("Accuracy", f"{float(snapshot['accuracy']) * 100:.0f}%")
+
+truth_table = pd.DataFrame(
+    {
+        "Input 1": X[:, 0],
+        "Input 2": X[:, 1],
+        "Expected": y,
+        "Predicted": np.asarray(snapshot["predictions"], dtype=int),
+    }
+)
+
+st.subheader("Aktuelle Vorhersagen")
+st.dataframe(truth_table, width="stretch", hide_index=True)
 
 st.subheader("Anleitung")
 st.markdown(
     """
-    1. **Lernrate (η) einstellen**
-    Die Lernrate bestimmt, **wie stark** das Perceptron seine Gewichte bei einem Fehler anpasst.
-    - Kleine Lernrate → langsames, aber stabiles Lernen
-    - Große Lernrate → schnelles, aber eventuell instabiles Lernen
-
-    2. **Anzahl der Epochen wählen**
-    Eine Epoche bedeutet, dass **alle Trainingsdaten einmal durchlaufen werden**.
-    Mehr Epochen = mehr Lernschritte.
-
-    3. **„Training starten“ klicken**
-    Nach dem Klick beginnt das Perceptron zu lernen.
-    Du siehst Schritt für Schritt:
-    - wie sich die **Entscheidungsgrenze (Linie)** verschiebt
-    - wie sich die **Gewichte (w₁, w₂)** und der **Bias** verändern
-
-    4. **Visualisierung verstehen**
-    - 🔵 Punkte → Klasse **1**
-    - 🟠 Punkte → Klasse **0**
-    - ⚫ Linie → aktuelle Entscheidungsgrenze des Perceptrons
-
-    Ziel des Trainings ist es, die Linie so zu verschieben,
-    dass **nur der Punkt (1,1)** als **1** klassifiziert wird
-    (AND-Operator).
-
-    **Tipp:**
-    Probiere verschiedene Lernraten und Epochen aus,
-    um zu sehen, wie sich das Lernverhalten verändert.
-
+    1. Wähle Lernrate, Epochen und bei Bedarf einen neuen Seed.
+    2. Starte das Training oder springe mit dem Slider direkt zu einem bestimmten Update.
+    3. Die Linie zeigt die aktuelle Entscheidungsgrenze des Perceptrons.
+    4. Unten siehst du jederzeit, welche vier AND-Beispiele schon korrekt klassifiziert werden.
     """
 )
 
-# --------------------------------------------------
-# Explanation
-# --------------------------------------------------
 with st.expander("Erklärung zum Perceptron"):
-    # --------------------------------------------------
-    # THEORY - WHAT IS A PERCEPTRON
-    # --------------------------------------------------
-    st.markdown("---")
-    st.markdown("## Was ist ein Perceptron?")
-
     st.markdown(
-        """
-        Ein **Perceptron** ist das **einfachste neuronale Netzwerk** und auch der kleinste Baustein von einem.
-        Es besteht aus:
-
-        - mehreren Eingaben (x₁, x₂, …)
-        - zugehörigen Gewichten (w₁, w₂, …)
-        - einem Bias (b)
-        - einer Aktivierungsfunktion
-        """
-    )
-
-    st.markdown("### Mathematisches Modell")
-
-    st.latex(r"z = w_1 x_1 + w_2 x_2 + b")
-
-    st.markdown(
-        """
-        Die Ausgabe erfolgt über eine **Schwellwertfunktion**:
-        """
-    )
-
-    st.latex(
         r"""
-        \hat{y} =
-        \begin{cases}
-        1 & \text{wenn } z > 0 \\
-        0 & \text{sonst}
-        \end{cases}
+Ein **Perceptron** ist das einfachste neuronale Netzwerk.
+Es lernt eine **lineare Entscheidungsgrenze**.
+
+### Mathematisches Modell
+
+Das Perceptron berechnet:
+
+$$z = w_1 x_1 + w_2 x_2 + b$$
+
+und wandelt den Wert per Schwellwertfunktion in eine Klasse um.
+
+### Lernregel
+
+Bei einem Fehler werden Gewichte und Bias angepasst:
+
+$$w = w + \eta \cdot error \cdot x$$
+
+$$b = b + \eta \cdot error$$
+
+So verschiebt sich die Entscheidungsgrenze Schritt für Schritt, bis die AND-Punkte möglichst sauber getrennt sind.
         """
     )
 
-    # --------------------------------------------------
-    # LEARNING
-    # --------------------------------------------------
-    st.markdown("---")
-    st.markdown("## Wie lernt ein Perceptron?")
-
-    st.markdown(
-        """
-        Das Perceptron lernt **durch Fehlerkorrektur** - einen iterativen Prozess,
-        bei dem Fehler schrittweise minimiert werden.
-
-        ### Der Lernprozess im Detail:
-
-        1. **Initialisierung** - Gewichte und Bias werden zufällig gesetzt
-        2. **Vorhersage berechnen** - Für jeden Trainingspunkt wird z = w·x + b berechnet
-        3. **Fehler bestimmen** - Differenz zwischen erwartetem und vorhergesagtem Wert
-        4. **Gewichte anpassen** - Korrektur basierend auf dem Fehler
-        5. **Wiederholen** - Bis alle Punkte korrekt klassifiziert sind (oder Epochen-Limit erreicht)
-        """
-    )
-
-    st.markdown("### Fehlerberechnung")
-
-    st.latex(r"error = y - \hat{y}")
-
-    st.markdown(
-        """
-        **Mögliche Fehler:**
-        - error = +1 → Punkt sollte 1 sein, war aber 0 ⇒ Gewichte erhöhen
-        - error = -1 → Punkt sollte 0 sein, war aber 1 ⇒ Gewichte verringern
-        - error = 0 → Korrekte Vorhersage ⇒ keine Änderung
-        """
-    )
-
-    st.markdown("### Update-Regeln (Perceptron-Lernregel)")
-
-    st.latex(r"w = w + \eta \cdot error \cdot x")
-    st.latex(r"b = b + \eta \cdot error")
-
-    st.markdown(
-        """
-        ### Die Rolle der Lernrate η
-
-        - **η = 0.1** → Kleine Schritte, stabiles aber langsames Lernen
-        - **η = 0.5** → Moderate Schritte, guter Kompromiss
-        - **η = 1.0** → Große Schritte, schnell aber potenziell instabil
-
-        **Beispiel:** Bei error = 1, x = 0.5, η = 0.3:
-        - w_neu = w_alt + 0.3 × 1 × 0.5 = w_alt + 0.15
-        """
-    )
-
-    # --------------------------------------------------
-    # LIMITATIONS
-    # --------------------------------------------------
-    st.markdown("---")
-    st.markdown("## Einschränkungen & Anwendungen")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### ❌ Limitierungen")
-        st.markdown(
-            """
-            **Linear trennbare Probleme:**
-            - Kann nur Probleme lösen, die durch eine **gerade Linie** (2D) oder
-              **Hyperebene** (n-D) trennbar sind
-
-            **Beispiele nicht lösbarer Probleme:**
-            - **XOR** (Exclusive OR)
-            - Kreisförmige Klassengrenzen
-            - Verschachtelte Cluster
-
-            **Warum?**
-            - Ein einzelnes Perceptron kann nur **eine** Entscheidungsgrenze erzeugen
-            - Komplexere Probleme benötigen **mehrere Schichten** (Multi-Layer Networks)
-            """
-        )
-
-    with col2:
-        st.markdown("### ✅ Praktische Anwendungen")
-        st.markdown(
-            """
-            **Wo Perceptrons gut funktionieren:**
-            - **Binäre Klassifikation** (2 Klassen)
-            - **Sentiment-Analyse** (positiv/negativ)
-            - **Spam-Filter** (Spam/Ham)
-            - **Medizinische Diagnose** (krank/gesund)
-
-            **Historische Bedeutung:**
-            - 1957 von Frank Rosenblatt entwickelt
-            - Grundstein für moderne neuronale Netze
-            - Einfach, aber fundamental wichtig
-
-            **Modernes Relevanz:**
-            - Baustein in tiefen Netzen
-            - Verständnisgrundlage für Backpropagation
-            """
-        )
+if st.session_state.perceptron_is_animating:
+    if st.session_state.perceptron_current_step < max_step:
+        time.sleep(0.18)
+        st.session_state.perceptron_current_step += 1
+        st.rerun()
+    else:
+        st.session_state.perceptron_is_animating = False
