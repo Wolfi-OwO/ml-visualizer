@@ -270,6 +270,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: December 2025
+**Version**: 2.2.1
+**Last Updated**: May 2026
 **Status**: Production Ready

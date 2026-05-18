@@ -1,3 +1,29 @@
+/* Ensure the main content can shrink next to the sidebar (prevents right-side clipping). */
+section[data-testid="stMain"] {
+  min-width: 0;
+}
+
+/*
+  Streamlit "wide" layout still caps the main container width on large screens.
+  Increase it so the right side of the viewport is actually used.
+*/
+section[data-testid="stMain"] > div[data-testid="stMainBlockContainer"],
+div[data-testid="stMainBlockContainer"],
+div.block-container {
+  max-width: min(100%, 1800px);
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+@media (max-width: 768px) {
+  section[data-testid="stMain"] > div[data-testid="stMainBlockContainer"],
+  div[data-testid="stMainBlockContainer"],
+  div.block-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 .footer {
   text-align: center;
   font-size: 0.85rem;

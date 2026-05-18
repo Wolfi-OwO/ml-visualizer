@@ -1,4 +1,3 @@
 section[data-testid='stSidebar'] {
     background-color: #111;
-    flex-shrink: 0 !important;
 }

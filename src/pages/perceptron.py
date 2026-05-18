@@ -1,8 +1,8 @@
 import time
 
-import altair as alt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 DEFAULT_CONFIG = {
@@ -13,14 +13,10 @@ DEFAULT_CONFIG = {
 }
 
 st.title("Perceptron - Interaktive Lernvisualisierung")
-st.caption(
-    "Trainiere das Perceptron auf der AND-Wahrheitstabelle und verfolge jeden Update-Schritt."
-)
+st.caption("Single-Neuron Netzwerk: Inputs → Output (AND-Wahrheitstabelle).")
 
-X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-y = np.array([0, 0, 0, 1])
-
-st.sidebar.header("Einstellungen")
+X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+y = np.array([0, 0, 0, 1], dtype=int)
 
 
 def predict_labels(weights: np.ndarray, bias: float) -> np.ndarray:
@@ -66,41 +62,125 @@ def build_history(
     return history
 
 
-def build_boundary_chart(snapshot: dict[str, object]) -> alt.LayerChart:
-    weights = np.asarray(snapshot["weights"], dtype=float)
-    bias = float(snapshot["bias"])
+def edge_color(weight: float, highlighted: bool) -> str:
+    if highlighted:
+        return "#facc15"
+    return "#22c55e" if weight >= 0 else "#ef4444"
 
-    points_df = pd.DataFrame(X, columns=["x", "y"])
-    points_df["class"] = y.astype(str)
-    points_df["prediction"] = np.asarray(snapshot["predictions"], dtype=int).astype(str)
 
-    points = (
-        alt.Chart(points_df)
-        .mark_circle(size=220)
-        .encode(
-            x=alt.X("x:Q", scale=alt.Scale(domain=[-0.2, 1.2]), title="x₁"),
-            y=alt.Y("y:Q", scale=alt.Scale(domain=[-0.2, 1.2]), title="x₂"),
-            color=alt.Color("class:N", scale=alt.Scale(range=["#f97316", "#2563eb"])),
-            tooltip=["x", "y", "class", "prediction"],
+def node_color(value: float, highlighted: bool) -> str:
+    if highlighted:
+        return "#facc15"
+    if value >= 0.5:
+        return "#22c55e"
+    return "#94a3b8"
+
+
+def build_perceptron_figure(
+    weights: np.ndarray,
+    bias: float,
+    inputs: np.ndarray,
+    sim_step: int,
+) -> go.Figure:
+    x_positions = [0.0, 0.0, 1.8]
+    y_positions = [0.75, 0.25, 0.5]
+
+    z = float(np.dot(inputs, weights) + bias)
+    output = float(1.0 if z >= 0 else 0.0)
+
+    fig = go.Figure()
+
+    for i, start_y in enumerate(y_positions[:2]):
+        highlighted = sim_step == 1
+        weight = float(weights[i])
+        fig.add_trace(
+            go.Scatter(
+                x=[x_positions[i], x_positions[2]],
+                y=[start_y, y_positions[2]],
+                mode="lines",
+                line={
+                    "color": edge_color(weight, highlighted),
+                    "width": max(2.0, 2.5 + abs(weight) * 1.8),
+                },
+                hoverinfo="text",
+                text=f"w{i+1} = {weight:+.3f}",
+                showlegend=False,
+            )
+        )
+
+    node_text = [
+        f"x₁ = {int(inputs[0])}",
+        f"x₂ = {int(inputs[1])}",
+        f"ŷ = {int(output)}",
+    ]
+    node_values = [float(inputs[0]), float(inputs[1]), output]
+    node_highlights = [sim_step == 0, sim_step == 0, sim_step >= 2]
+    node_colors = [
+        node_color(value, highlighted)
+        for value, highlighted in zip(node_values, node_highlights, strict=False)
+    ]
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_positions,
+            y=y_positions,
+            mode="markers+text",
+            marker={"size": 60, "color": node_colors, "line": {"width": 2, "color": "#0f172a"}},
+            text=node_text,
+            textposition="middle center",
+            hoverinfo="skip",
+            showlegend=False,
         )
     )
 
-    if abs(weights[1]) > 1e-9:
-        x_values = np.linspace(-0.2, 1.2, 100)
-        y_values = -(weights[0] * x_values + bias) / weights[1]
-        line_df = pd.DataFrame({"x": x_values, "y": y_values})
-        boundary = alt.Chart(line_df).mark_line(color="#111827", strokeWidth=3).encode(x="x", y="y")
-    elif abs(weights[0]) > 1e-9:
-        x_boundary = -bias / weights[0]
-        boundary = (
-            alt.Chart(pd.DataFrame({"x": [x_boundary]}))
-            .mark_rule(color="#111827", strokeWidth=3)
-            .encode(x="x:Q")
-        )
-    else:
-        boundary = alt.Chart(pd.DataFrame({"x": [], "y": []})).mark_line()
+    fig.add_annotation(
+        x=1.8,
+        y=0.18,
+        text=f"z = w·x + b = {z:+.3f}<br>b = {bias:+.3f}",
+        showarrow=False,
+        font={"size": 12, "color": "#e2e8f0"},
+        align="left",
+        bgcolor="#0b1220",
+        bordercolor="#334155",
+        borderwidth=1,
+    )
 
-    return (points + boundary).properties(height=420)
+    fig.update_layout(
+        height=360,
+        margin={"l": 20, "r": 20, "t": 20, "b": 20},
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis={"visible": False, "range": [-0.4, 2.3]},
+        yaxis={"visible": False, "range": [0.0, 1.0]},
+    )
+    return fig
+
+
+def build_training_figure(history: list[dict[str, object]]) -> go.Figure:
+    df = pd.DataFrame(
+        {
+            "step": [row["step"] for row in history],
+            "accuracy": [row["accuracy"] for row in history],
+        }
+    )
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=df["step"],
+            y=df["accuracy"],
+            mode="lines",
+            name="Accuracy",
+            line={"color": "#2563eb", "width": 3},
+        )
+    )
+    fig.update_layout(
+        height=260,
+        margin={"l": 20, "r": 20, "t": 20, "b": 20},
+        yaxis={"title": "Accuracy", "range": [0, 1]},
+        xaxis={"title": "Step"},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
+    )
+    return fig
 
 
 if "perceptron_config" not in st.session_state:
@@ -111,7 +191,14 @@ if "perceptron_is_animating" not in st.session_state:
     st.session_state.perceptron_is_animating = False
 if "perceptron_start_requested" not in st.session_state:
     st.session_state.perceptron_start_requested = False
+if "perceptron_step_widget" not in st.session_state:
+    st.session_state.perceptron_step_widget = 0
 
+st.sidebar.header("Inputs")
+input1 = st.sidebar.slider("Input 1", 0, 1, 0, step=1)
+input2 = st.sidebar.slider("Input 2", 0, 1, 0, step=1)
+
+st.sidebar.subheader("Training")
 with st.sidebar.form("perceptron_controls"):
     lr_input = st.slider(
         "Lernrate η", 0.01, 1.0, float(st.session_state.perceptron_config["lr"]), 0.01
@@ -152,79 +239,87 @@ if st.session_state.perceptron_start_requested:
     else:
         st.session_state.perceptron_current_step = max_step
         st.session_state.perceptron_is_animating = False
+    st.session_state.perceptron_step_widget = st.session_state.perceptron_current_step
     st.session_state.perceptron_start_requested = False
 
 if stop_animation:
     st.session_state.perceptron_is_animating = False
 
-st.session_state.perceptron_current_step = min(st.session_state.perceptron_current_step, max_step)
-st.sidebar.slider("Trainingsschritt", 0, max_step, key="perceptron_current_step")
-snapshot = history[st.session_state.perceptron_current_step]
-
-st.altair_chart(build_boundary_chart(snapshot), width="stretch")
-
+st.session_state.perceptron_current_step = min(
+    int(st.session_state.perceptron_current_step), max_step
+)
 if st.session_state.perceptron_is_animating:
-    st.info(
-        "Animation läuft. Die Visualisierung bleibt sichtbar und springt Schritt für Schritt weiter."
-    )
+    st.session_state.perceptron_step_widget = st.session_state.perceptron_current_step
+step_value = st.sidebar.slider(
+    "Trainingsschritt",
+    0,
+    max_step,
+    key="perceptron_step_widget",
+)
+st.session_state.perceptron_current_step = int(step_value)
 
-metric_col1, metric_col2, metric_col3 = st.columns(3)
-with metric_col1:
-    st.metric("Aktueller Schritt", int(snapshot["step"]))
+snapshot = history[st.session_state.perceptron_current_step]
+weights = np.asarray(snapshot["weights"], dtype=float)
+bias = float(snapshot["bias"])
+
+inputs = np.array([input1, input2], dtype=float)
+z = float(np.dot(inputs, weights) + bias)
+predicted_output = int(z >= 0)
+expected_output = int(input1 & input2)
+
+step_texts = {
+    0: "Inputs setzen",
+    1: "Gewichte anwenden: z = w·x + b",
+    2: "Schwellwert: ŷ = 1 falls z ≥ 0",
+}
+sim_step = st.sidebar.slider("Signalfluss", 0, 2, 0)
+
+visual_col, side_col = st.columns([2, 1], gap="large")
+
+with visual_col:
+    st.subheader("Perceptron Visualisierung")
+    st.plotly_chart(build_perceptron_figure(weights, bias, inputs, sim_step), width="stretch")
+    st.info(step_texts[sim_step])
+    st.subheader("Trainingsverlauf")
+    st.plotly_chart(build_training_figure(history), width="stretch")
+
+with side_col:
+    st.subheader("Aktueller Schritt")
+    st.metric("Schritt", int(snapshot["step"]))
     st.metric("Epoche", int(snapshot["epoch"]))
-with metric_col2:
-    weights = np.asarray(snapshot["weights"], dtype=float)
-    st.metric("w₁", f"{weights[0]:.3f}")
-    st.metric("w₂", f"{weights[1]:.3f}")
-with metric_col3:
-    st.metric("Bias", f"{float(snapshot['bias']):.3f}")
+    st.metric("w₁", f"{weights[0]:+.3f}")
+    st.metric("w₂", f"{weights[1]:+.3f}")
+    st.metric("Bias", f"{bias:+.3f}")
     st.metric("Accuracy", f"{float(snapshot['accuracy']) * 100:.0f}%")
+    st.divider()
+    st.metric("Erwartet (AND)", expected_output)
+    st.metric("Vorhergesagt", predicted_output)
+    st.write(f"`z = {z:+.3f}`")
 
+st.divider()
+st.subheader("Truth Table - AND")
 truth_table = pd.DataFrame(
     {
-        "Input 1": X[:, 0],
-        "Input 2": X[:, 1],
+        "Input 1": X[:, 0].astype(int),
+        "Input 2": X[:, 1].astype(int),
         "Expected": y,
         "Predicted": np.asarray(snapshot["predictions"], dtype=int),
     }
 )
-
-st.subheader("Aktuelle Vorhersagen")
 st.table(truth_table)
 
-st.subheader("Anleitung")
-st.markdown(
-    """
-    1. Wähle Lernrate, Epochen und bei Bedarf einen neuen Seed.
-    2. Starte das Training oder springe mit dem Slider direkt zu einem bestimmten Update.
-    3. Die Linie zeigt die aktuelle Entscheidungsgrenze des Perceptrons.
-    4. Unten siehst du jederzeit, welche vier AND-Beispiele schon korrekt klassifiziert werden.
-    """
-)
-
-with st.expander("Erklärung zum Perceptron"):
+with st.expander("Erklärung", expanded=False):
     st.markdown(
         r"""
-Ein **Perceptron** ist das einfachste neuronale Netzwerk.
-Es lernt eine **lineare Entscheidungsgrenze**.
+Das **Perceptron** ist ein einzelnes Neuron ohne Hidden Layer.
 
-### Mathematisches Modell
-
-Das Perceptron berechnet:
-
+**Berechnung:**
 $$z = w_1 x_1 + w_2 x_2 + b$$
+$$\hat{y} = \begin{cases}1 & \text{wenn } z \ge 0\\0 & \text{sonst}\end{cases}$$
 
-und wandelt den Wert per Schwellwertfunktion in eine Klasse um.
-
-### Lernregel
-
-Bei einem Fehler werden Gewichte und Bias angepasst:
-
+**Lernregel (bei Fehler):**
 $$w = w + \eta \cdot error \cdot x$$
-
 $$b = b + \eta \cdot error$$
-
-So verschiebt sich die Entscheidungsgrenze Schritt für Schritt, bis die AND-Punkte möglichst sauber getrennt sind.
         """
     )
 

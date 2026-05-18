@@ -213,8 +213,7 @@ with left_col:
         class_input = st.selectbox("Klasse", options=["Unclassified", "A", "B"], index=0)
         add_point_button = st.form_submit_button("Punkt hinzufuegen")
 
-with right_col:
-    chart_placeholder = st.empty()
+chart_placeholder = right_col.empty()
 
 if add_point_button and not st.session_state.knn_animation_running:
     x_value = float(x_input)
@@ -360,3 +359,4 @@ if st.session_state.knn_animation_running and st.session_state.knn_animation_que
         else:
             st.session_state.knn_animation_running = False
             st.session_state.knn_animation_neighbor_count = 0
+            st.rerun()
