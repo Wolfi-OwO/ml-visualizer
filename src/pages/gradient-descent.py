@@ -193,15 +193,6 @@ if st.session_state.animating:
 with st.expander("Verlauf der Schritte"):
     st.dataframe(history_df.round(4), hide_index=True, use_container_width=True)
 
-st.subheader("Erklärung")
-st.markdown(r"""
-Diese App visualisiert das **Gradient Descent** Verfahren zur Optimierung einer Funktion.
-
-- Wähle im **Sidebar** den Startwert $x_0$, die Lernrate $\eta$ und die Anzahl der Iterationen.
-- Klicke auf **Verlauf berechnen**, um neue Parameter zu übernehmen.
-- Starte danach die Animation oder bewege den Slider **Schritt** manuell.
-""")
-
 with st.expander("Verlauf der Schritte"):
     st.dataframe(history_df.round(4), width="stretch", hide_index=True)
 
