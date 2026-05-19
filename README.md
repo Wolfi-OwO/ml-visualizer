@@ -149,7 +149,7 @@ git push origin main      # Deploys to production (requires approval)
 
 ```bash
 # Check application health
-curl https://ml-visualizer-prod.azurewebsites.net/_stcore/health
+curl https://ml-visualizer.at/_stcore/health
 ```
 
 ### View Logs
@@ -270,6 +270,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Version**: 2.2.1
+**Version**: 2.2.2
 **Last Updated**: May 2026
 **Status**: Production Ready
