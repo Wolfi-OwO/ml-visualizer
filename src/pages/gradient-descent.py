@@ -189,10 +189,6 @@ if st.session_state.animating:
         st.session_state.animating = False
 
 
-# ERKLÄRUNG
-with st.expander("Verlauf der Schritte"):
-    st.dataframe(history_df.round(4), hide_index=True, use_container_width=True)
-
 with st.expander("Verlauf der Schritte"):
     st.dataframe(history_df.round(4), width="stretch", hide_index=True)
 
