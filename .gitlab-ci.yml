@@ -604,6 +604,11 @@ deploy-production:
       echo "✓ PRODUCTION DEPLOYMENT SUCCESSFUL!"
       echo "Production deployment completed: $(date)" >> production-deployment-report.txt
       echo "Access production at: https://${PRODUCTION_FQDN}"
+  artifacts:
+    when: always
+    paths:
+      - production-deployment-report.txt
+    expire_in: 1 week
 
 stop-production:
   extends: .deploy_production_base
