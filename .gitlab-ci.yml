@@ -23,6 +23,7 @@ stages:
   - deploy:review
   - deploy:production
   - release
+  - pages
   - cleanup
 
 image: mcr.microsoft.com/azure-cli:latest
@@ -636,6 +637,26 @@ stop-production:
 
       echo "Production stop completed: $(date)" >> production-stop-report.txt
 
+
+# =====================================================
+# PAGES - Static Landing Page (GitLab Pages)
+# =====================================================
+# Publishes landing/ as the GitLab Pages site for this project.
+# Once a custom domain is attached in Settings > Pages, this becomes
+# the site served at the domain apex (ml-visualizer.at) while the
+# Streamlit app itself keeps running unchanged on its own subdomain.
+
+pages:
+  stage: pages
+  image: alpine:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - mkdir -p public
+    - cp -r landing/. public/
+  artifacts:
+    paths:
+      - public
 
 # =====================================================
 # CLEANUP STAGE - Environment Auto-Stop
