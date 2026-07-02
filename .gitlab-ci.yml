@@ -342,9 +342,7 @@ docker-build:
         --password "$AZURE_CLIENT_SECRET" \
         --tenant "$AZURE_TENANT_ID"
       az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-
-      # Install required tools
-      apt-get update -y && apt-get install -y curl jq || true
+      tdnf install -y curl jq
 
 deploy-review:
   extends: .deploy_review_base
@@ -439,6 +437,11 @@ deploy-review:
       echo "Staging deployment completed: $(date)" >> review-deployment-report.txt
       echo "" >> review-deployment-report.txt
       echo "Access staging app at: https://${REVIEW_APP_FQDN}"
+  artifacts:
+    when: always
+    paths:
+      - review-deployment-report.txt
+    expire_in: 1 week
 
 stop-review:
   extends: .deploy_review_base
@@ -501,7 +504,7 @@ stop-review:
         --tenant "$AZURE_TENANT_ID"
 
       az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      apt-get update -y && apt-get install -y curl jq || true
+      tdnf install -y curl jq
 
 deploy-production:
   extends: .deploy_production_base
