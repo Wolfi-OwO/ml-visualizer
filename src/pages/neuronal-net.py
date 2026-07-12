@@ -12,6 +12,18 @@ from utils.neural_network import (
     snapshot_to_params,
     train_and_network,
 )
+from utils.theme import (
+    CANVAS,
+    CONTRAST,
+    HIGHLIGHT,
+    INK,
+    MUTED,
+    NEGATIVE,
+    POSITIVE,
+    RULE,
+    SIGNAL,
+    sequential,
+)
 
 DEFAULT_TRAINING_CONFIG = {
     "learning_rate": 0.3,
@@ -19,8 +31,11 @@ DEFAULT_TRAINING_CONFIG = {
     "seed": 1,
 }
 
-st.title("Neuronales Netz: Binary AND Operation")
-st.caption("Das Netz kann jetzt trainieren, Snapshots laden und auf kleinere Layouts reagieren.")
+st.title("Neuronales Netz – Binäres AND")
+st.caption(
+    "Ein 2-2-1-Netz lernt die AND-Funktion. Trainieren, frühere Snapshots laden "
+    "oder einzelne Gewichte von Hand setzen."
+)
 
 
 def store_params(params) -> None:
@@ -58,8 +73,8 @@ if "nn_sim_step" not in st.session_state:
 if "nn_training_config" not in st.session_state:
     st.session_state.nn_training_config = DEFAULT_TRAINING_CONFIG.copy()
 
-st.sidebar.header("Netzwerk Parameter")
-st.sidebar.write("Binary AND: output = input1 AND input2")
+st.sidebar.header("Eingaben")
+st.sidebar.caption("Gelernt wird AND: Der Ausgang ist nur dann 1, wenn beide Eingänge 1 sind.")
 input1 = st.sidebar.slider("Input 1", 0, 1, 0, step=1)
 input2 = st.sidebar.slider("Input 2", 0, 1, 0, step=1)
 
@@ -182,17 +197,13 @@ truth_table = evaluate_and_truth_table(params)
 
 
 def activation_color(value: float) -> str:
-    if value < 0.3:
-        return "#2e86ab"
-    if value < 0.7:
-        return "#a23b72"
-    return "#f18f01"
+    return sequential(value)
 
 
 def edge_color(weight: float, highlighted: bool) -> str:
     if highlighted:
-        return "#facc15"
-    return "#22c55e" if weight >= 0 else "#ef4444"
+        return HIGHLIGHT
+    return POSITIVE if weight >= 0 else NEGATIVE
 
 
 def build_network_figure() -> go.Figure:
@@ -268,7 +279,7 @@ def build_network_figure() -> go.Figure:
                 marker={
                     "size": 40 if sim_step == 0 else 34,
                     "color": activation_color(float(node_value)),
-                    "line": {"color": "#facc15" if sim_step == 0 else "#111827", "width": 3},
+                    "line": {"color": HIGHLIGHT if sim_step == 0 else CANVAS, "width": 3},
                 },
                 text=[f"{int(node_value)}"],
                 textposition="middle center",
@@ -289,7 +300,7 @@ def build_network_figure() -> go.Figure:
                 marker={
                     "size": 42 if sim_step == 2 else 36,
                     "color": activation_color(float(node_value)),
-                    "line": {"color": "#facc15" if sim_step == 2 else "#111827", "width": 3},
+                    "line": {"color": HIGHLIGHT if sim_step == 2 else CANVAS, "width": 3},
                 },
                 text=[f"H{node_index + 1}<br>{node_value:.2f}"],
                 textposition="middle center",
@@ -307,7 +318,7 @@ def build_network_figure() -> go.Figure:
             marker={
                 "size": 50 if sim_step == 4 else 40,
                 "color": activation_color(output_activation),
-                "line": {"color": "#facc15" if sim_step == 4 else "#111827", "width": 3},
+                "line": {"color": HIGHLIGHT if sim_step == 4 else CANVAS, "width": 3},
             },
             text=[f"Out<br>{output_activation:.2f}"],
             textposition="middle center",
@@ -341,6 +352,8 @@ def build_network_figure() -> go.Figure:
         margin={"l": 20, "r": 20, "t": 30, "b": 20},
         autosize=True,
         showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         xaxis={"showgrid": False, "showticklabels": False, "zeroline": False, "range": [-0.3, 2.3]},
         yaxis={
             "showgrid": False,
@@ -368,7 +381,7 @@ def build_training_figure(history_rows: list[dict[str, object]]) -> go.Figure:
             y=history_df["loss"],
             mode="lines",
             name="Loss",
-            line={"color": "#2563eb", "width": 3},
+            line={"color": SIGNAL, "width": 3},
         )
     )
     figure.add_trace(
@@ -377,22 +390,25 @@ def build_training_figure(history_rows: list[dict[str, object]]) -> go.Figure:
             y=history_df["accuracy"],
             mode="lines",
             name="Accuracy",
-            line={"color": "#f97316", "width": 3},
+            line={"color": CONTRAST, "width": 3},
             yaxis="y2",
         )
     )
 
     if st.session_state.nn_loaded_snapshot >= 0:
         marker_epoch = history[snapshot_index]["epoch"]
-        figure.add_vline(x=marker_epoch, line_dash="dash", line_color="#94a3b8")
+        figure.add_vline(x=marker_epoch, line_dash="dash", line_color=MUTED)
 
     figure.update_layout(
         height=320,
         margin={"l": 20, "r": 20, "t": 20, "b": 20},
         autosize=True,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": INK},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
-        xaxis={"title": "Epoche"},
-        yaxis={"title": "Loss"},
+        xaxis={"title": "Epoche", "gridcolor": RULE},
+        yaxis={"title": "Loss", "gridcolor": RULE},
         yaxis2={"title": "Accuracy", "overlaying": "y", "side": "right", "range": [0, 1]},
     )
     return figure
@@ -400,9 +416,9 @@ def build_training_figure(history_rows: list[dict[str, object]]) -> go.Figure:
 
 step_texts = {
     0: "Inputs setzen",
-    1: "Input -> Hidden: Gewichte und Beitraege",
+    1: "Input → Hidden: Gewichte und Beiträge",
     2: "Hidden Layer aktiviert sich",
-    3: "Hidden -> Output: Beitraege werden aufsummiert",
+    3: "Hidden → Output: Beiträge werden aufsummiert",
     4: "Output und finale Vorhersage",
 }
 
@@ -415,11 +431,12 @@ current_snapshot_label = (
 visual_col, side_col = st.columns([2, 1], gap="large")
 
 with visual_col:
-    st.subheader("Netzwerk Visualisierung")
+    st.subheader("Das Netz")
     st.plotly_chart(build_network_figure(), width="stretch")
     st.info(step_texts[sim_step])
     st.caption(
-        "Gruen = positives Gewicht, Rot = negatives Gewicht, Orange/Violett/Blau = Aktivierung."
+        "Türkise Kanten sind positive Gewichte, rote negative, und je dicker die Kante, "
+        "desto größer der Betrag. Die Farbe eines Knotens zeigt, wie stark er feuert."
     )
     st.subheader("Trainingsverlauf")
     st.plotly_chart(build_training_figure(history), width="stretch")
@@ -454,13 +471,13 @@ with side_col:
     st.write(f"AND({input1}, {input2}) = {expected_output} | Modell = {predicted_output}")
 
 st.divider()
-st.subheader("Truth Table - Binary AND")
+st.subheader("Wahrheitstabelle")
 truth_col, expected_col = st.columns(2, gap="large")
 with truth_col:
-    st.write("**Netzwerk Output**")
+    st.write("**Was das Netz ausgibt**")
     st.table(pd.DataFrame(truth_table["rows"]))
 with expected_col:
-    st.write("**Erwartete Wahrheitstabelle**")
+    st.write("**Was herauskommen sollte**")
     expected_rows = [
         {"Input 1": 0, "Input 2": 0, "Expected": 0},
         {"Input 1": 0, "Input 2": 1, "Expected": 0},
@@ -469,27 +486,27 @@ with expected_col:
     ]
     st.table(pd.DataFrame(expected_rows))
 
-st.subheader("Anleitung")
-st.markdown(
-    """
-    1. Setze die beiden binaeren Inputs in der Sidebar.
-    2. Trainiere das Netz oder lade einen frueheren Snapshot.
-    3. Nutze bei Bedarf den manuellen Modus, um einzelne Gewichte direkt zu veraendern.
-    4. Der Signalfluss-Slider hebt den gerade erklaerten Teil des Netzes hervor.
-    """
-)
-
 with st.expander("Wie das Training funktioniert", expanded=False):
     st.markdown(
         """
-Das Training nutzt eine kleine 2-2-1 Architektur mit **Sigmoid**-Aktivierungen.
-Trainiert wird auf der kompletten AND-Wahrheitstabelle per Batch-Gradient-Descent.
+Das Netz hat zwei Eingänge, zwei versteckte Neuronen und einen Ausgang, alle mit
+Sigmoid-Aktivierung. Trainiert wird auf der kompletten AND-Wahrheitstabelle, also
+auf ganzen vier Beispielen; ein Datensatz, der in eine Zeile passt.
 
-- Forward Pass: Eingaben werden durch Hidden- und Output-Layer propagiert.
-- Loss: Binary Cross Entropy misst den Fehler der vier Trainingsbeispiele.
-- Update: Backpropagation passt Gewichte und Biases schrittweise an.
+Ein Durchgang läuft immer gleich: Die vier Beispiele werden vorwärts durchs Netz
+geschickt, Binary Cross Entropy misst, wie weit die Ausgaben danebenliegen, und
+Backpropagation schiebt jedes Gewicht ein Stück in die Richtung, die den Fehler
+verkleinert. Das Ganze mal Epochen, und die Fehlerkurve fällt.
 
-Dadurch kannst du zwischen zufaellig initialisierten Gewichten, trainierten Snapshots
-und manuellen Aenderungen hin- und herspringen.
+Interessant ist, dass die Accuracy dabei viel früher auf 100 % springt als der Loss
+gegen null geht. Sobald alle vier Ausgaben auf der richtigen Seite von 0,5 liegen,
+ist die Wahrheitstabelle korrekt – ob das Netz dabei 0,51 oder 0,99 ausgibt, merkt
+nur noch der Loss. Genau deshalb trainiert man weiter, obwohl scheinbar schon alles
+stimmt.
+
+Ein Snapshot wird pro Epoche mitgeschrieben, du kannst also im Verlauf zurückspringen,
+und der Signalfluss-Regler blendet einzeln ein, was gerade wohin fließt. Wer sehen will,
+was das Training eigentlich gefunden hat, setzt die Gewichte im manuellen Modus selbst
+und vergleicht.
         """
     )

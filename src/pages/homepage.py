@@ -1,22 +1,19 @@
 import streamlit as st
 
-st.title("Startseite")
+st.title("ML Visualizer")
 
 st.markdown(
     """
-    **Willkommen zur Datascience & Artificial Intelligence Webanwendung**
+    Vier klassische Verfahren, jedes auf einer eigenen Seite, alles live gerechnet.
 
-    Diese interaktive App demonstriert grundlegende Konzepte und Visualisierungen aus dem Bereich
-    der Datenwissenschaft und künstlichen Intelligenz. Du findest hier praktische, interaktive
-    Seiten zu folgenden Themen:
+    Gradient Descent rollt eine Kugel in ein Minimum, und über die Lernrate entscheidest du,
+    ob sie dort ankommt oder darüber hinausschießt. Das Perceptron lernt eine Trenngerade für
+    die AND-Verknüpfung, ein Trainingsschritt nach dem anderen. KNN ordnet neue Punkte nach
+    ihren nächsten Nachbarn ein, wobei k allein deine Entscheidung ist. Und das neuronale Netz
+    lernt dieselbe AND-Funktion noch einmal, diesmal mit Hidden Layer und Backpropagation.
 
-    - **Gradient Descent** - Visualisierung des Lernprozesses und Einfluss der Lernrate
-    - **Perceptron** - Einfache binäre Klassifikation mit Entscheidungsgrenzen
-    - **KNN Visualizer** - Verstehen, wie Nachbarschafts-Klassifikation funktioniert
-    - **Neuronale Netze** - Einfache neuronale Netz-Experimente und Visualisierungen
-
-    Wähle eine Seite links in der Navigation, um loszulegen. Alle Beispiele sind für Lehrzwecke
-    ausgelegt und ermöglichen das Verändern von Parametern zur Beobachtung des Verhaltens.
+    Such dir links eine Seite aus. Interessant wird es meistens dort, wo die Parameter
+    unvernünftig werden: Lernrate auf Anschlag, k größer als die halbe Punktwolke.
     """,
     unsafe_allow_html=True,
 )

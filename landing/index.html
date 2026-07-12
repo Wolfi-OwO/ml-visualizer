@@ -3,14 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ML Visualizer – Interaktive Visualisierungen für Machine-Learning-Grundlagen</title>
-<meta name="description" content="Gradient Descent, Perceptron, KNN und neuronale Netze live im Browser erkunden. Parameter verändern und den Lernprozess in Echtzeit beobachten.">
+<title>ML Visualizer – interaktive Visualisierung klassischer ML-Verfahren</title>
+<meta name="description" content="Gradient Descent, Perceptron, k-Nearest-Neighbors und ein 2-2-1-Netz im Browser. Hyperparameter setzen, Training schrittweise nachvollziehen. Streamlit-Anwendung, Quellcode offen.">
+<meta name="author" content="Phillip Kofler">
 <link rel="canonical" href="https://ml-visualizer.at/">
+<link rel="author" href="https://www.woofi-developments.at/">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="ML Visualizer - Interaktive Visualisierungen für Machine-Learning-Grundlagen">
-<meta property="og:description" content="Gradient Descent, Perceptron, KNN und neuronale Netze live im Browser erkunden. Parameter verändern und den Lernprozess in Echtzeit beobachten.">
+<meta property="og:site_name" content="woofi-developments">
+<meta property="og:title" content="ML Visualizer – interaktive Visualisierung klassischer ML-Verfahren">
+<meta property="og:description" content="Gradient Descent, Perceptron, k-Nearest-Neighbors und ein 2-2-1-Netz im Browser. Hyperparameter setzen, Training schrittweise nachvollziehen.">
 <meta property="og:url" content="https://ml-visualizer.at/">
 <meta property="og:locale" content="de_AT">
 <meta name="twitter:card" content="summary">
@@ -22,11 +25,27 @@
   "@type": "WebApplication",
   "name": "ML Visualizer",
   "url": "https://app.ml-visualizer.at/",
-  "description": "Interaktive Visualisierungen für Gradient Descent, Perceptron, KNN und neuronale Netze.",
+  "description": "Interaktive Visualisierung von Gradient Descent, Perceptron, k-Nearest-Neighbors und einem 2-2-1-Feedforward-Netz.",
   "applicationCategory": "EducationalApplication",
   "operatingSystem": "Any (Web Browser)",
   "isAccessibleForFree": true,
-  "author": { "@type": "Person", "name": "Kofler Phillip" },
+  "inLanguage": "de-AT",
+  "softwareRequirements": "Moderner Webbrowser",
+  "author": {
+    "@type": "Person",
+    "name": "Phillip Kofler",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
 }
 </script>
@@ -41,11 +60,12 @@
         <path d="M4 8 Q16 30 28 8" fill="none" stroke="#8e96ac" stroke-width="2.2" stroke-linecap="round"/>
         <circle cx="16" cy="24.5" r="3.4" fill="#ff8a3d"/>
       </svg>
-      ml-visualizer
+      <span class="brand-parent">woofi-developments</span><span class="brand-sep">/</span><span class="brand-name">ml-visualizer</span>
     </a>
     <nav>
-      <a class="text-link" href="#tools">Visualisierungen</a>
-      <a class="text-link" href="#ueber">Über das Projekt</a>
+      <a class="text-link" href="#module">Module</a>
+      <a class="text-link" href="#aufbau">Technischer Aufbau</a>
+      <a class="text-link" href="https://www.woofi-developments.at" rel="noopener">woofi-developments.at</a>
       <a class="btn btn-ghost" href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
     </nav>
   </div>
@@ -55,12 +75,13 @@
   <section class="hero">
     <div class="wrap">
       <div>
-        <p class="eyebrow">Interaktives Lerntool</p>
-        <h1>Sieh zu, wie eine Maschine lernt.</h1>
+        <p class="eyebrow">Unterrichtsmaterial</p>
+        <h1>Was ein Modell beim Lernen eigentlich tut.</h1>
         <p class="lede">
-          Vier klassische ML-Algorithmen zum Anfassen: Parameter verstellen, den
-          Lernprozess in Echtzeit beobachten und verstehen, was unter der Haube
-          passiert &ndash; direkt im Browser, ohne Anmeldung.
+          Gradient Descent, Perceptron, k-Nearest-Neighbors und ein kleines
+          Feedforward-Netz. Du stellst die Hyperparameter ein und siehst jeden
+          einzelnen Trainingsschritt, statt nur die fertige Zahl am Ende.
+          Läuft im Browser, nichts zu installieren.
         </p>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://app.ml-visualizer.at" rel="noopener">App öffnen &rarr;</a>
@@ -68,7 +89,7 @@
         </div>
       </div>
       <figure class="hero-figure">
-        <canvas id="hero-canvas" width="460" height="300" role="img" aria-label="Animation: ein Punkt rollt entlang einer Parabel per Gradient Descent zum Minimum"></canvas>
+        <canvas id="hero-canvas" width="460" height="300" role="img" aria-label="Gradient Descent auf der Funktion f(x) = 0,5 x²: Die Iterationen nähern sich schrittweise dem Minimum bei x = 0."></canvas>
         <figcaption class="caption">
           <span class="signal-dot" id="hero-caption-x">x = 8.000</span>
           <span id="hero-caption-step">step 0/20</span>
@@ -77,12 +98,12 @@
     </div>
   </section>
 
-  <section class="tools" id="tools">
+  <section class="tools" id="module">
     <div class="wrap">
       <div class="section-head">
-        <p class="eyebrow">Die Visualisierungen</p>
-        <h2>Vier Algorithmen. Ein Prinzip: Parameter anfassen.</h2>
-        <p>Jede Seite ist ein eigenständiges Experiment mit echten, live berechneten Ergebnissen &ndash; keine vorgerenderten Bilder.</p>
+        <p class="eyebrow">Module</p>
+        <h2>Die vier Module</h2>
+        <p>Jedes rechnet live. Was du im Diagramm siehst, kommt aus den Parametern, die du gerade eingestellt hast – vorberechnet ist daran nichts.</p>
       </div>
 
       <div class="card-grid">
@@ -95,7 +116,7 @@
             </svg>
           </div>
           <h3>Gradient Descent</h3>
-          <p>Wie ein Algorithmus Schritt für Schritt das Minimum einer Funktion findet. Lernrate verändern und sehen, wann er konvergiert &ndash; oder überschießt.</p>
+          <p>Minimiert f(x) = 0,5 x² über den Gradienten. Startwert, Lernrate und Iterationen sind einstellbar. Bei kleiner Lernrate kriecht der Punkt dem Minimum entgegen und kommt in 20 Schritten nicht an; bei großer ist er sofort da.</p>
           <span class="path">/gradient-descent</span>
         </a>
 
@@ -110,7 +131,7 @@
             </svg>
           </div>
           <h3>Perceptron</h3>
-          <p>Das einfachste künstliche Neuron trainiert live eine Trenngerade für die AND-Verknüpfung &ndash; Epoche für Epoche mitverfolgen.</p>
+          <p>Ein Neuron, zwei Eingänge, trainiert auf die AND-Wahrheitstabelle. Die Lernregel korrigiert Gewichte und Bias immer dann, wenn das Neuron danebenliegt. Die Trenngerade wird nach jedem Update neu gezeichnet.</p>
           <span class="path">/perceptron</span>
         </a>
 
@@ -127,8 +148,8 @@
               <circle cx="80" cy="50" r="5" fill="none" stroke="#edeff5" stroke-width="1.5"/>
             </svg>
           </div>
-          <h3>KNN Visualizer</h3>
-          <p>Punkte platzieren und direkt sehen, wie K-Nearest-Neighbors sie anhand ihrer nächsten Nachbarn klassifiziert. k frei einstellbar.</p>
+          <h3>k-Nearest-Neighbors</h3>
+          <p>Klassifikation über die k nächsten Nachbarn im euklidischen Abstand. Die Punkte beider Klassen setzt du selbst, ebenso die, die eingeordnet werden sollen. In der Animation tauchen die Nachbarn einzeln auf.</p>
           <span class="path">/knn-visualize</span>
         </a>
 
@@ -148,8 +169,8 @@
               <circle cx="140" cy="50" r="6" style="fill:#ff8a3d"/>
             </svg>
           </div>
-          <h3>Neural Network</h3>
-          <p>Ein kleines neuronales Netz lernt die AND-Funktion von Grund auf. Gewichte, Trainingsverlauf und Wahrheitstabelle live mitverfolgen.</p>
+          <h3>Feedforward-Netz (2-2-1)</h3>
+          <p>Ein Netz mit einer verborgenen Schicht lernt AND per Backpropagation. Gewichte lassen sich von Hand setzen, jeder Trainingsstand liegt als Snapshot vor, und Fehlerkurve und Wahrheitstabelle stehen nebeneinander.</p>
           <span class="path">/neuronal-net</span>
         </a>
 
@@ -157,28 +178,34 @@
     </div>
   </section>
 
-  <section class="about" id="ueber">
+  <section class="about" id="aufbau">
     <div class="wrap">
       <div>
-        <p class="eyebrow">Über das Projekt</p>
-        <h2>Gebaut, um ML wirklich zu verstehen &ndash; nicht nur darüber zu lesen.</h2>
+        <p class="eyebrow">Technischer Aufbau</p>
+        <h2>Wie es gebaut ist</h2>
         <p>
-          Der ML Visualizer ist ein Lernprojekt von Kofler Phillip (HTL Villach,
-          Ausbildungszweig Informatik). Er entstand aus der Überzeugung, dass man
-          Algorithmen besser versteht, wenn man ihre Parameter selbst verändern
-          kann, statt nur statische Diagramme auf einer Folie zu betrachten.
+          Die Algorithmen stecken direkt in NumPy, ohne ML-Framework.
+          Gradientenberechnung, Lernregel und Backpropagation stehen als
+          lesbarer Code da und nicht hinter einem <code>fit()</code>-Aufruf –
+          genau das ist ja der Punkt, wenn man sie verstehen will. Die
+          Diagramme kommen von Altair und Plotly, die Oberfläche von
+          Streamlit, das Deployment von einer GitLab-Pipeline.
         </p>
         <p>
-          Der Code ist quelloffen und wird laufend um neue Visualisierungen
-          erweitert.
+          Entstanden ist der ML Visualizer als Material für den
+          Informatikunterricht; weitergeführt wird er unter
+          <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>.
+          Wenn dir ein Fehler auffällt oder ein Modul fehlt: E-Mail genügt,
+          oder ein Issue im Repository.
         </p>
       </div>
       <aside class="stat-block">
         <dl>
-          <dt>Visualisierungen</dt><dd>4</dd>
-          <dt>Framework</dt><dd>Streamlit</dd>
-          <dt>Preis</dt><dd>0 EUR</dd>
-          <dt>Anmeldung</dt><dd>keine</dd>
+          <dt>Module</dt><dd>4</dd>
+          <dt>Sprache</dt><dd>Python</dd>
+          <dt>Numerik</dt><dd>NumPy</dd>
+          <dt>Oberfläche</dt><dd>Streamlit</dd>
+          <dt>Diagramme</dt><dd>Altair, Plotly</dd>
         </dl>
       </aside>
     </div>
@@ -187,10 +214,14 @@
 
 <footer>
   <div class="wrap">
-    <span>© 2026 Kofler Phillip &middot; kontakt: <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a></span>
+    <span>
+      Ein Projekt von <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>
+      &middot; Phillip Kofler
+      &middot; <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a>
+    </span>
     <span class="links">
-      <a href="https://gitlab.com/woofi4/Projects/5bhif-datascience-webapp" rel="noopener">GitLab-Repository</a>
-      <a href="https://woofi-developments.at" rel="noopener">Portfolio</a>
+      <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments.at</a>
+      <a href="https://gitlab.com/woofi4/Projects/5bhif-datascience-webapp" rel="noopener">Repository</a>
       <a href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
     </span>
   </div>

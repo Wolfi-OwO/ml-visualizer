@@ -86,7 +86,9 @@ class TestGradientDescent:
 
         # Each loss should be less than or equal to the previous
         for i in range(1, len(losses)):
-            assert losses[i] <= losses[i - 1], f"Loss should decrease: {losses[i-1]} -> {losses[i]}"
+            assert losses[i] <= losses[i - 1], (
+                f"Loss should decrease: {losses[i - 1]} -> {losses[i]}"
+            )
 
     def test_gradient_descent_step_calculation(self):
         """Test individual gradient descent step calculation."""
@@ -599,9 +601,9 @@ class TestNeuralNetwork:
         hidden_raw = np.dot(weights_hidden, inputs) + bias_hidden
 
         expected_raw = np.array([1.5 - 2.25, 1.5 - 2.25])  # [-0.75, -0.75]
-        assert np.allclose(
-            hidden_raw, expected_raw
-        ), f"Hidden raw should be {expected_raw}, got {hidden_raw}"
+        assert np.allclose(hidden_raw, expected_raw), (
+            f"Hidden raw should be {expected_raw}, got {hidden_raw}"
+        )
 
     def test_neural_network_hidden_layer(self):
         """Test hidden layer calculation from neuronal-net.py."""
@@ -672,9 +674,9 @@ class TestNeuralNetwork:
 
         for inputs, expected in test_cases:
             result = forward(np.array(inputs))
-            assert (
-                result == expected
-            ), f"AND({inputs[0]}, {inputs[1]}) should be {expected}, got {result}"
+            assert result == expected, (
+                f"AND({inputs[0]}, {inputs[1]}) should be {expected}, got {result}"
+            )
 
     def test_binary_and_training_data(self):
         """Test binary AND training data."""

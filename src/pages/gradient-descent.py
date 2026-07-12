@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from utils.theme import CONTRAST, MUTED, SIGNAL
+
 DEFAULT_CONFIG = {
     "x0": 8.0,
     "lr": 0.1,
@@ -143,13 +145,13 @@ def make_chart(step):
 
     base = (
         alt.Chart(curve_df)
-        .mark_line(color="#888", strokeWidth=2)
+        .mark_line(color=MUTED, strokeWidth=2)
         .encode(x=alt.X("x", title="x"), y=alt.Y("y", title="f(x)"))
     )
 
     trail = (
         alt.Chart(vis)
-        .mark_circle(size=80, color="#1D9E75", opacity=0.8)
+        .mark_circle(size=80, color=CONTRAST, opacity=0.8)
         .encode(
             x="x",
             y="y",
@@ -163,7 +165,7 @@ def make_chart(step):
     )
 
     current_pt = vis.tail(1)
-    current = alt.Chart(current_pt).mark_circle(size=250, color="#D85A30").encode(x="x", y="y")
+    current = alt.Chart(current_pt).mark_circle(size=250, color=SIGNAL).encode(x="x", y="y")
 
     return (base + trail + current).properties(height=420).interactive()
 
@@ -193,26 +195,25 @@ with st.expander("Verlauf der Schritte"):
     st.dataframe(history_df.round(4), width="stretch", hide_index=True)
 
 with st.expander("Erklärung zum Gradient Descent"):
-    st.write("""
-Gradient Descent (deutsch: Gradientenabstieg) ist ein Optimierungsverfahren, das häufig in der Mathematik, Statistik und im Machine Learning verwendet wird, um das Minimum einer Funktion zu finden.
+    st.markdown(
+        r"""
+Gradientenabstieg sucht das Minimum einer Funktion, ohne es je auszurechnen. Statt
+die Lösung zu bestimmen, tastet sich das Verfahren hin: Von einem Startpunkt $x_0$
+aus schaut es sich die Steigung $f'(x)$ an und geht ein Stück in die Gegenrichtung,
+also bergab. Dann noch einmal, und noch einmal.
 
-**Grundidee:**
-- Man startet an einem Punkt $$x_0$ auf der Kurve der Funktion $f(x)$.
-- Berechnet den Gradienten $f'(x)$, der die Steigung der Funktion an diesem Punkt angibt.
-- Geht in die entgegengesetzte Richtung des Gradienten (weil wir das Minimum suchen) mit einer Schrittweite, die durch die **Lernrate** $\\eta$ bestimmt wird:\n
-$x_{\text{neu}} = x - \\eta \\cdot f'(x)$
+$$x_{\text{neu}} = x - \eta \cdot f'(x)$$
 
-**Parameter:**
-1. **Startwert $x_0$**: Ausgangspunkt für den Algorithmus.
-2. **Lernrate $\\eta$**: Bestimmt die Größe der Schritte. Zu große Werte können den Algorithmus instabil machen, zu kleine Werte verlangsamen die Konvergenz.
-3. **Iterationen**: Anzahl der Schritte, die durchgeführt werden.
+Wie groß so ein Schritt ausfällt, hängt an der Lernrate $\eta$. Für unsere Parabel
+ist $f'(x) = x$, die Iteration also schlicht $x_{\text{neu}} = (1 - \eta)\,x$: Jeder
+Schritt schrumpft $x$ um denselben Faktor. Mit kleiner Lernrate kriecht der Punkt
+dem Minimum entgegen und 20 Iterationen reichen nicht weit; je näher $\eta$ an 1
+liegt, desto direkter ist er da. Der Regler geht bis 0,95, deshalb konvergiert das
+Verfahren hier immer. Überschießen würde erst ab $\eta > 1$ passieren, und
+divergieren, also mit jedem Schritt weiter wegfliegen, erst ab $\eta > 2$.
 
-**Visualisierung:**
-- Die **blaue Linie** zeigt die Funktion $f(x)$.
-- Die **roten Punkte** zeigen die bisherigen Schritte des Gradient Descent.
-- Der **grüne Punkt** zeigt den aktuellen Punkt, an dem wir uns befinden.
-
-**Ziel:**
-- Der Algorithmus nähert sich Schritt für Schritt dem Minimum der Funktion.
-- Bei $f(x) = 0.5 x^2$ ist das Minimum bei $x = 0$.
-""")
+Im Diagramm ist die graue Kurve die Funktion selbst, die türkisen Punkte sind die
+Schritte, die schon gelaufen sind, und der orange Punkt ist der aktuelle Stand.
+Das Minimum liegt bei $x = 0$.
+"""
+    )

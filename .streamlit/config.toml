@@ -1,3 +1,13 @@
 [server]
 headless = true
 port = 8501
+
+# Farbpalette identisch zur Landing Page (landing/styles.css),
+# damit App und Website als ein Produkt wirken.
+[theme]
+base = "dark"
+primaryColor = "#ff8a3d"
+backgroundColor = "#0f1420"
+secondaryBackgroundColor = "#161c2c"
+textColor = "#edeff5"
+font = "sans serif"

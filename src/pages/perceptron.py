@@ -5,6 +5,19 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.theme import (
+    CANVAS,
+    CONTRAST,
+    HIGHLIGHT,
+    INK,
+    MUTED,
+    NEGATIVE,
+    PANEL,
+    POSITIVE,
+    RULE,
+    SIGNAL,
+)
+
 DEFAULT_CONFIG = {
     "lr": 0.3,
     "epochs": 5,
@@ -12,8 +25,10 @@ DEFAULT_CONFIG = {
     "animate": True,
 }
 
-st.title("Perceptron - Interaktive Lernvisualisierung")
-st.caption("Single-Neuron Netzwerk: Inputs → Output (AND-Wahrheitstabelle).")
+st.title("Perceptron")
+st.caption(
+    "Ein einzelnes Neuron: zwei Eingänge, ein Ausgang – trainiert auf die AND-Wahrheitstabelle."
+)
 
 X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
 y = np.array([0, 0, 0, 1], dtype=int)
@@ -64,16 +79,16 @@ def build_history(
 
 def edge_color(weight: float, highlighted: bool) -> str:
     if highlighted:
-        return "#facc15"
-    return "#22c55e" if weight >= 0 else "#ef4444"
+        return HIGHLIGHT
+    return POSITIVE if weight >= 0 else NEGATIVE
 
 
 def node_color(value: float, highlighted: bool) -> str:
     if highlighted:
-        return "#facc15"
+        return HIGHLIGHT
     if value >= 0.5:
-        return "#22c55e"
-    return "#94a3b8"
+        return SIGNAL
+    return MUTED
 
 
 def build_perceptron_figure(
@@ -103,7 +118,7 @@ def build_perceptron_figure(
                     "width": max(2.0, 2.5 + abs(weight) * 1.8),
                 },
                 hoverinfo="text",
-                text=f"w{i+1} = {weight:+.3f}",
+                text=f"w{i + 1} = {weight:+.3f}",
                 showlegend=False,
             )
         )
@@ -125,7 +140,7 @@ def build_perceptron_figure(
             x=x_positions,
             y=y_positions,
             mode="markers+text",
-            marker={"size": 60, "color": node_colors, "line": {"width": 2, "color": "#0f172a"}},
+            marker={"size": 60, "color": node_colors, "line": {"width": 2, "color": CANVAS}},
             text=node_text,
             textposition="middle center",
             hoverinfo="skip",
@@ -138,10 +153,10 @@ def build_perceptron_figure(
         y=0.18,
         text=f"z = w·x + b = {z:+.3f}<br>b = {bias:+.3f}",
         showarrow=False,
-        font={"size": 12, "color": "#e2e8f0"},
+        font={"size": 12, "color": INK},
         align="left",
-        bgcolor="#0b1220",
-        bordercolor="#334155",
+        bgcolor=PANEL,
+        bordercolor=RULE,
         borderwidth=1,
     )
 
@@ -150,6 +165,7 @@ def build_perceptron_figure(
         margin={"l": 20, "r": 20, "t": 20, "b": 20},
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
+        font={"color": INK},
         xaxis={"visible": False, "range": [-0.4, 2.3]},
         yaxis={"visible": False, "range": [0.0, 1.0]},
     )
@@ -170,14 +186,17 @@ def build_training_figure(history: list[dict[str, object]]) -> go.Figure:
             y=df["accuracy"],
             mode="lines",
             name="Accuracy",
-            line={"color": "#2563eb", "width": 3},
+            line={"color": CONTRAST, "width": 3},
         )
     )
     fig.update_layout(
         height=260,
         margin={"l": 20, "r": 20, "t": 20, "b": 20},
-        yaxis={"title": "Accuracy", "range": [0, 1]},
-        xaxis={"title": "Step"},
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"color": INK},
+        yaxis={"title": "Accuracy", "range": [0, 1], "gridcolor": RULE},
+        xaxis={"title": "Step", "gridcolor": RULE},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     return fig
@@ -277,7 +296,7 @@ sim_step = st.sidebar.slider("Signalfluss", 0, 2, 0)
 visual_col, side_col = st.columns([2, 1], gap="large")
 
 with visual_col:
-    st.subheader("Perceptron Visualisierung")
+    st.subheader("Das Neuron")
     st.plotly_chart(build_perceptron_figure(weights, bias, inputs, sim_step), width="stretch")
     st.info(step_texts[sim_step])
     st.subheader("Trainingsverlauf")
@@ -297,7 +316,7 @@ with side_col:
     st.write(f"`z = {z:+.3f}`")
 
 st.divider()
-st.subheader("Truth Table - AND")
+st.subheader("Wahrheitstabelle")
 truth_table = pd.DataFrame(
     {
         "Input 1": X[:, 0].astype(int),
@@ -311,15 +330,27 @@ st.table(truth_table)
 with st.expander("Erklärung", expanded=False):
     st.markdown(
         r"""
-Das **Perceptron** ist ein einzelnes Neuron ohne Hidden Layer.
+Ein Perceptron ist ein einzelnes Neuron, ohne Hidden Layer, ohne alles. Es gewichtet
+seine Eingänge, addiert einen Bias dazu und schaut nur noch nach, ob das Ergebnis
+über null liegt:
 
-**Berechnung:**
-$$z = w_1 x_1 + w_2 x_2 + b$$
-$$\hat{y} = \begin{cases}1 & \text{wenn } z \ge 0\\0 & \text{sonst}\end{cases}$$
+$$z = w_1 x_1 + w_2 x_2 + b
+\qquad
+\hat{y} = \begin{cases}1 & \text{wenn } z \ge 0\\0 & \text{sonst}\end{cases}$$
 
-**Lernregel (bei Fehler):**
-$$w = w + \eta \cdot error \cdot x$$
-$$b = b + \eta \cdot error$$
+Gelernt wird stur nach Fehler. Das Neuron rät ein Beispiel, vergleicht mit der
+richtigen Antwort und rechnet die Differenz aus. Stimmt die Vorhersage, bleibt alles,
+wie es ist. Liegt sie daneben, wandern die Gewichte um einen Lernraten-Anteil in die
+Richtung, die den Fehler kleiner gemacht hätte:
+
+$$w \leftarrow w + \eta \cdot (y - \hat{y}) \cdot x
+\qquad
+b \leftarrow b + \eta \cdot (y - \hat{y})$$
+
+Geometrisch ist $z = 0$ eine Gerade, und jedes Update kippt oder verschiebt sie.
+Bei AND lässt sich eine Gerade finden, die die einzige Eins von den drei Nullen
+trennt, deshalb funktioniert das hier. Bei XOR gäbe es keine solche Gerade, und
+das Perceptron würde ewig weiterruckeln, ohne je fertig zu werden.
         """
     )
 

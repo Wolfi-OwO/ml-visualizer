@@ -84,11 +84,8 @@
 
     ctx.beginPath();
     ctx.fillStyle = signalColor;
-    ctx.shadowColor = signalColor;
-    ctx.shadowBlur = 10;
-    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
 
     var caption = document.getElementById("hero-caption-x");
     var captionStep = document.getElementById("hero-caption-step");

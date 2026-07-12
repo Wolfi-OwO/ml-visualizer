@@ -1,3 +1,12 @@
-section[data-testid='stSidebar'] {
-    background-color: #111;
+section[data-testid="stSidebar"] {
+  background-color: #0b0f18;
+  border-right: 1px solid #262e44;
+}
+
+/* Sidebar-Überschriften an die Serif-Display-Schrift angleichen */
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+  font-family: Georgia, "Iowan Old Style", ui-serif, serif;
+  font-weight: 400;
 }

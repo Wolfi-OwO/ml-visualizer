@@ -1,3 +1,19 @@
+/* App-Styles – abgestimmt auf die Design-Tokens der Landing Page
+   (dunkler Canvas, Serif-Display, Signal-Orange + Teal). */
+
+:root {
+  --canvas: #0f1420;
+  --panel: #161c2c;
+  --panel-raised: #1b2236;
+  --rule: #262e44;
+  --ink: #edeff5;
+  --muted: #8e96ac;
+  --signal: #ff8a3d;
+  --contrast: #46c9c0;
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+}
+
 /* Ensure the main content can shrink next to the sidebar (prevents right-side clipping). */
 section[data-testid="stMain"] {
   min-width: 0;
@@ -24,13 +40,93 @@ div.block-container {
   }
 }
 
+/* ---------- Typografie: Serif-Headings wie auf der Landing Page ---------- */
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 400 !important;
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.5rem;
+}
+
+/* Der einleitende st.caption unter einem Titel wirkt wie ein "eyebrow" */
+h1 + div [data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] {
+  color: var(--muted);
+}
+
+/* ---------- Metriken als dezente Karten ---------- */
+
+[data-testid="stMetric"] {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+[data-testid="stMetricValue"] {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+[data-testid="stMetricLabel"] p {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---------- Trennlinien / Expander / Tabellen ---------- */
+
+hr {
+  border-color: var(--rule);
+}
+
+[data-testid="stExpander"] details {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 45%, transparent);
+}
+
+[data-testid="stTable"] table,
+[data-testid="stDataFrame"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Buttons an das Signal-Orange angleichen ---------- */
+
+.stButton > button[kind="primary"],
+.stFormSubmitButton > button[kind="primary"] {
+  border: none;
+}
+
+/* ---------- Footer ---------- */
+
 .footer {
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   padding: 10px 20px;
-  border-radius: 10px;
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
 }
 
 .footer * {
-  color: #555;
+  color: var(--muted);
+}
+
+.footer a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.footer a:hover {
+  color: var(--ink);
 }

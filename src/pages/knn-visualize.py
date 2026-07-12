@@ -5,13 +5,18 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from utils.theme import CONTRAST, HIGHLIGHT, INK, MUTED, SIGNAL
+
 DEFAULT_KNN_SETTINGS = {
     "k": 3,
     "animate": False,
 }
 
-st.title("KNN (K-Nearest Neighbors) Visualizer")
-st.caption("Fuege Punkte hinzu und klassifiziere alle offenen Punkte mit einem Klick.")
+st.title("K-Nearest Neighbors")
+st.caption(
+    "Punkte hinzufügen, k wählen, klassifizieren lassen. Die offenen Punkte bekommen die "
+    "Klasse, die unter ihren k nächsten Nachbarn in der Mehrheit ist."
+)
 
 
 def seeded_points() -> tuple[list[tuple[float, float, str]], list[tuple[float, float]]]:
@@ -62,7 +67,7 @@ def build_knn_chart(
                 "x": x_value,
                 "y": y_value,
                 "label": label,
-                "color": "#2563eb" if label == "A" else "#f97316",
+                "color": SIGNAL if label == "A" else CONTRAST,
                 "shape": "circle",
                 "size": 140,
                 "tooltip": f"Klasse {label}",
@@ -75,7 +80,7 @@ def build_knn_chart(
                 "x": x_value,
                 "y": y_value,
                 "label": "?",
-                "color": "#6b7280",
+                "color": MUTED,
                 "shape": "triangle-up",
                 "size": 180,
                 "tooltip": "Unklassifiziert",
@@ -88,7 +93,7 @@ def build_knn_chart(
                 "x": x_value,
                 "y": y_value,
                 "label": label,
-                "color": "#facc15",
+                "color": HIGHLIGHT,
                 "shape": "diamond",
                 "size": 230,
                 "tooltip": f"Nachbar {label}",
@@ -101,7 +106,7 @@ def build_knn_chart(
                 "x": highlight_point[0],
                 "y": highlight_point[1],
                 "label": highlight_point[2],
-                "color": "#111827",
+                "color": INK,
                 "shape": "triangle-up",
                 "size": 260,
                 "tooltip": "Aktueller Punkt",
@@ -179,7 +184,7 @@ def start_animation(k_neighbors: int) -> None:
 
 ensure_state()
 
-st.sidebar.subheader("Einstellungen - KNN")
+st.sidebar.subheader("Einstellungen")
 with st.sidebar.form("knn_controls"):
     k = st.slider("Anzahl der Nachbarn k", 1, 15, int(st.session_state.knn_settings["k"]))
     animate = st.checkbox(
@@ -187,7 +192,7 @@ with st.sidebar.form("knn_controls"):
         value=bool(st.session_state.knn_settings["animate"]),
     )
     classify_button = st.form_submit_button("Klassifikation starten", type="primary")
-reset_button = st.sidebar.button("Alle Punkte zuruecksetzen")
+reset_button = st.sidebar.button("Alle Punkte zurücksetzen")
 stop_animation = st.sidebar.button("Animation stoppen")
 
 if reset_button:
@@ -202,7 +207,7 @@ if stop_animation and st.session_state.knn_animation_running:
 left_col, right_col = st.columns([1, 2], gap="large")
 
 with left_col:
-    st.subheader("Punkt hinzufuegen")
+    st.subheader("Punkt hinzufügen")
     with st.form("add_point_form"):
         x_input = st.number_input(
             "X-Koordinate", min_value=0.0, max_value=1.0, value=0.5, step=0.01
@@ -211,7 +216,7 @@ with left_col:
             "Y-Koordinate", min_value=0.0, max_value=1.0, value=0.5, step=0.01
         )
         class_input = st.selectbox("Klasse", options=["Unclassified", "A", "B"], index=0)
-        add_point_button = st.form_submit_button("Punkt hinzufuegen")
+        add_point_button = st.form_submit_button("Punkt hinzufügen")
 
 chart_placeholder = right_col.empty()
 
@@ -247,8 +252,8 @@ if classify_button:
         st.info("Keine neuen Punkte zum Klassifizieren vorhanden.")
     elif len(st.session_state.knn_points) < k:
         st.warning(
-            "Nicht genug klassifizierte Punkte fuer KNN "
-            f"(benoetigt: {k}, vorhanden: {len(st.session_state.knn_points)})."
+            "Nicht genügend klassifizierte Punkte für KNN "
+            f"(benötigt: {k}, vorhanden: {len(st.session_state.knn_points)})."
         )
     elif animate:
         start_animation(k)
@@ -290,12 +295,10 @@ with metric_col3:
     )
 
 st.markdown(
-    "**Legende:** Blau = Klasse A, Orange = Klasse B, Grau = offen, Gelb = aktuelle Nachbarn"
+    "**Legende:** Orange = Klasse A, Türkis = Klasse B, Grau = offen, Gelb = aktuelle Nachbarn"
 )
 if st.session_state.knn_animation_running:
-    st.info(
-        "Animation laeuft. Die Nachbarn werden ohne kompletten Seiten-Block Schritt fuer Schritt angezeigt."
-    )
+    st.info("Animation läuft. Die nächsten Nachbarn erscheinen einzeln, Schritt für Schritt.")
 elif st.session_state.knn_unclassified_points:
     st.info(f"{len(st.session_state.knn_unclassified_points)} Punkt(e) warten auf Klassifikation.")
 
@@ -310,26 +313,22 @@ if st.session_state.knn_last_results:
         )
     )
 
-st.subheader("Anleitung")
-st.markdown(
-    """
-    1. Gib X- und Y-Koordinaten ein und waehle die Klasse oder **Unclassified**.
-    2. Fuege den Punkt hinzu.
-    3. Starte die Klassifikation ueber die Sidebar.
-    4. Mit aktivierter Animation siehst du die ausgewaehlten Nachbarn Schritt fuer Schritt.
-    """
-)
-
-with st.expander("Erklaerung zum KNN"):
+with st.expander("Erklärung zum KNN"):
     st.markdown(
         """
-**K-Nearest Neighbors (KNN)** klassifiziert neue Punkte ueber ihre naechsten Nachbarn.
+K-Nearest Neighbors trainiert nicht. Es gibt keine Gewichte, kein Modell, nichts, was
+zwischen Daten und Vorhersage stünde: Die Trainingspunkte *sind* das Modell. Kommt ein
+neuer Punkt dazu, misst das Verfahren die Distanz zu allen bekannten Punkten, nimmt die
+k nächsten und übernimmt die Klasse, die unter ihnen am häufigsten vorkommt.
 
-1. Distanzen zu allen bekannten Punkten berechnen
-2. Die **k** kleinsten Distanzen auswaehlen
-3. Die haeufigste Klasse dieser Nachbarn uebernehmen
+Damit hängt alles an k. Ein k von 1 kopiert einfach den nächstgelegenen Nachbarn, was
+jeden einzelnen Ausreißer zum Gesetz erhebt. Ein sehr großes k mittelt so weit über die
+Punktwolke hinweg, dass am Ende immer die größere Klasse gewinnt, egal wo der neue Punkt
+liegt. Bei geraden k sind Gleichstände möglich, und die löst diese Implementierung stumpf
+zugunsten von Klasse A auf – ein Grund, k ungerade zu wählen.
 
-Der Algorithmus braucht kein separates Training. Er nutzt direkt die vorhandenen Datenpunkte.
+Der Preis für das fehlende Training: Jede einzelne Vorhersage muss alle Distanzen neu
+ausrechnen. Bei zehn Punkten fällt das nicht auf, bei zehn Millionen schon.
         """
     )
 
