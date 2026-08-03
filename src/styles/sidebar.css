@@ -1,12 +1,21 @@
 section[data-testid="stSidebar"] {
+  /* Deliberately darker than --canvas (#0f1420): a distinct third surface
+     tier, not a duplicate of an existing token. */
   background-color: #0b0f18;
-  border-right: 1px solid #262e44;
+  border-right: 1px solid var(--rule);
 }
 
-/* Sidebar-Überschriften an die Serif-Display-Schrift angleichen */
+/* Align the sidebar headings with the serif display typeface */
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 {
   font-family: Georgia, "Iowan Old Style", ui-serif, serif;
   font-weight: 400;
+}
+
+/* Pages that stack two widget groups (Eingaben + Training, etc.) had them
+   sitting back-to-back with only Streamlit's default gap. A bit more space
+   above each subsequent group heading reads as separation, not just a list. */
+section[data-testid="stSidebar"] h3 {
+  margin-top: 0.5rem;
 }

@@ -1,41 +1,49 @@
 @SHA = 1
 
+# PRIVATE-TOKEN was hardcoded here for months and got flagged by gitleaks --no-git as
+# a live, api-scoped GitLab PAT with a full account's read/write access — already
+# committed, so already exposed on the remote. Revoked immediately via the token's own
+# self-revoke endpoint (DELETE /personal_access_tokens/self, confirmed dead afterward
+# with a 401 invalid_token). Use the VS Code REST Client's .env support instead:
+# create a git-ignored `.env` next to this file with `GITLAB_TOKEN=<new token>`.
+@token = {{$dotenv GITLAB_TOKEN}}
+
 ### Get all pipelines with the state running
 
 GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 ### Get all pipelines with the state running
 
 GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running&sha=
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 
 ### Get all branches with the given name
 
 GET https://gitlab.com/api/v4/projects/76772967/repository/branches?search=2-defect-non-standard-streamlit-api-usage-in-app-py-st-page-st-navigation&merged=false
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 
 ### Get merge-conflict with the given source_branch
 
 GET https://gitlab.com/api/v4/projects/76772967/merge_requests?source_branch=2-defect-non-standard-streamlit-api-usage-in-app-py-st-page-st-navigation&merged=false
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 ### Get merge-conflict by id
 
 GET https://gitlab.com/api/v4/projects/76772967/merge_requests/1
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 -> head_pipeline:sha
 
 ### Get pipeline by sha id from head_pipeline in merge
 GET https://gitlab.com/api/v4/projects/76772967/pipelines?status=running&sha=acc6e41f0faa2c4a05e59b7647e481db19d50b65
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 
 ### Update the state of the pipeline
 POST https://gitlab.com/api/v4/projects/76772967/statuses/acc6e41f0faa2c4a05e59b7647e481db19d50b65?pipeline_id=2225372256
-PRIVATE-TOKEN: REDACTED-GITLAB-PAT
+PRIVATE-TOKEN: {{token}}
 Content-Type: application/json
 
 {

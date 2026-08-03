@@ -1,4 +1,4 @@
-/* App-Styles – abgestimmt auf die Design-Tokens der Landing Page
+/* Application styles -- matched to the landing page's design tokens
    (dunkler Canvas, Serif-Display, Signal-Orange + Teal). */
 
 :root {
@@ -12,6 +12,10 @@
   --contrast: #46c9c0;
   --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  /* App is dark-only (see .streamlit/config.toml theme.base) -- tell the UA so
+     native controls (scrollbars, number-input spinners) render dark instead
+     of the OS default light chrome fighting the rest of the page. */
+  color-scheme: dark;
 }
 
 /* Ensure the main content can shrink next to the sidebar (prevents right-side clipping). */
@@ -40,7 +44,7 @@ div.block-container {
   }
 }
 
-/* ---------- Typografie: Serif-Headings wie auf der Landing Page ---------- */
+/* ---------- Typography: serif headings, as on the landing page ---------- */
 
 h1,
 h2,
@@ -48,6 +52,9 @@ h3 {
   font-family: var(--font-display);
   font-weight: 400 !important;
   letter-spacing: 0.01em;
+  /* Matches the landing page's heading rule (landing/styles.css) so long
+     German titles wrap evenly on both surfaces instead of leaving a widow. */
+  text-wrap: balance;
 }
 
 h1 {
@@ -55,7 +62,7 @@ h1 {
   padding-bottom: 0.5rem;
 }
 
-/* Der einleitende st.caption unter einem Titel wirkt wie ein "eyebrow" */
+/* The leading st.caption under a title reads as an "eyebrow" */
 h1 + div [data-testid="stCaptionContainer"],
 [data-testid="stCaptionContainer"] {
   color: var(--muted);
@@ -98,6 +105,45 @@ hr {
 [data-testid="stTable"] table,
 [data-testid="stDataFrame"] {
   font-variant-numeric: tabular-nums;
+}
+
+/* Tables sat as bare unstyled elements next to the panel-and-rule treatment
+   every other surface (metrics, expanders) already gets -- give them the
+   same card so truth tables and step histories read as one system. */
+[data-testid="stTable"] {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+[data-testid="stTable"] table {
+  border-collapse: collapse;
+}
+
+[data-testid="stTable"] thead th {
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+
+[data-testid="stTable"] tbody td {
+  border-bottom: 1px solid var(--rule);
+  transition: background-color 0.15s ease;
+}
+
+[data-testid="stTable"] tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* --panel-raised was defined for cross-surface parity with the landing page
+   (landing/styles.css uses it on .card:hover) but sat unused here -- put it
+   to work as the row-hover state so truth tables read as interactive data. */
+[data-testid="stTable"] tbody tr:hover td {
+  background: var(--panel-raised);
 }
 
 /* ---------- Buttons an das Signal-Orange angleichen ---------- */

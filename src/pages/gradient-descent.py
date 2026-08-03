@@ -64,7 +64,7 @@ if "animating" not in st.session_state:
     st.session_state.animating = False
 
 
-# SIDEBAR — Einstellungen (KEIN Form, damit Änderungen sofort wirken)
+# SIDEBAR -- settings. Deliberately NOT a form, so changes take effect at once
 st.sidebar.subheader("Einstellungen")
 
 x0 = st.sidebar.slider(
@@ -92,7 +92,7 @@ iters = st.sidebar.slider(
     key="slider_iters",
 )
 
-# Erkennen ob Parameter geändert wurden → State zurücksetzen
+# Detect whether a parameter changed, and reset the state if so
 new_config = {"x0": x0, "lr": lr, "iterations": iters}
 if new_config != st.session_state.config:
     st.session_state.config = new_config
@@ -123,7 +123,7 @@ with col2:
         st.session_state.animating = False
 
 # SCHRITT-SLIDER (manuell)
-# Nur anzeigen wenn nicht animiert, damit kein Konflikt entsteht
+# Only shown while not animating, to avoid the two fighting over the frame
 if not st.session_state.animating:
     manual_step = st.sidebar.slider(
         "Schritt",
@@ -181,7 +181,7 @@ c3.metric("f(x)", f"{current['y']:.4f}")
 c4.metric("f'(x)", f"{current['gradient']:.4f}")
 
 
-# ANIMATIONSLOGIK — nach dem Chart ausführen
+# ANIMATION LOGIC -- runs after the chart
 if st.session_state.animating:
     if st.session_state.step < max_step:
         time.sleep(0.25)

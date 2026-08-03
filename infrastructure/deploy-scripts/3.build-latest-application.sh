@@ -21,7 +21,7 @@ echo "Building Docker image..."
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 docker build -t $IMAGE_NAME "$PROJECT_ROOT"
 
-# Tag Docker image mit Version und Latest
+# Tag the Docker image with both the version and latest
 docker tag $IMAGE_NAME $FULL_VERSION_TAG
 docker tag $IMAGE_NAME $LATEST_TAG
 

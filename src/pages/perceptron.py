@@ -143,6 +143,10 @@ def build_perceptron_figure(
             marker={"size": 60, "color": node_colors, "line": {"width": 2, "color": CANVAS}},
             text=node_text,
             textposition="middle center",
+            # Override the figure-wide INK font: node fill is HIGHLIGHT/SIGNAL/
+            # MUTED (from node_color()), and INK-on-those measured 1.25-2.57:1 --
+            # under the 3:1 WCAG floor. CANVAS clears 6.2:1+ on all of them.
+            textfont={"color": CANVAS, "size": 12},
             hoverinfo="skip",
             showlegend=False,
         )

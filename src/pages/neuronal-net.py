@@ -19,10 +19,12 @@ from utils.theme import (
     INK,
     MUTED,
     NEGATIVE,
+    PANEL,
     POSITIVE,
     RULE,
     SIGNAL,
     sequential,
+    with_alpha,
 )
 
 DEFAULT_TRAINING_CONFIG = {
@@ -237,8 +239,11 @@ def build_network_figure() -> go.Figure:
                 text=f"{contribution:.2f}" if highlighted else f"{weight:.2f}",
                 showarrow=False,
                 font={"size": 11},
-                bgcolor="rgba(255,255,255,0.85)" if not dark_mode else "rgba(17,24,39,0.85)",
-                bordercolor="rgba(148,163,184,0.7)",
+                # White literal has no PANEL-equivalent in the (always-dark) app
+                # palette -- it only applies to the local plotly_white template,
+                # which is a deliberate one-off light context for this chart.
+                bgcolor="rgba(255,255,255,0.85)" if not dark_mode else with_alpha(PANEL, 0.85),
+                bordercolor=with_alpha(MUTED, 0.7),
                 borderwidth=1,
             )
 
@@ -265,8 +270,8 @@ def build_network_figure() -> go.Figure:
             text=f"{contribution:.2f}" if highlighted else f"{weight:.2f}",
             showarrow=False,
             font={"size": 11},
-            bgcolor="rgba(255,255,255,0.85)" if not dark_mode else "rgba(17,24,39,0.85)",
-            bordercolor="rgba(148,163,184,0.7)",
+            bgcolor="rgba(255,255,255,0.85)" if not dark_mode else with_alpha(PANEL, 0.85),
+            bordercolor=with_alpha(MUTED, 0.7),
             borderwidth=1,
         )
 
@@ -283,7 +288,10 @@ def build_network_figure() -> go.Figure:
                 },
                 text=[f"{int(node_value)}"],
                 textposition="middle center",
-                textfont={"color": "white", "size": 13},
+                # CANVAS, not INK: node fill is MUTED/CONTRAST/SIGNAL (from
+                # `sequential()`), and INK-on-those measured 1.25-2.57:1 --
+                # under the 3:1 WCAG floor. CANVAS clears 6.2:1+ on all of them.
+                textfont={"color": CANVAS, "size": 13},
                 hoverinfo="skip",
                 showlegend=False,
             )
@@ -304,7 +312,7 @@ def build_network_figure() -> go.Figure:
                 },
                 text=[f"H{node_index + 1}<br>{node_value:.2f}"],
                 textposition="middle center",
-                textfont={"color": "white", "size": 11},
+                textfont={"color": CANVAS, "size": 11},
                 hoverinfo="skip",
                 showlegend=False,
             )
@@ -322,7 +330,7 @@ def build_network_figure() -> go.Figure:
             },
             text=[f"Out<br>{output_activation:.2f}"],
             textposition="middle center",
-            textfont={"color": "white", "size": 11},
+            textfont={"color": CANVAS, "size": 11},
             hoverinfo="skip",
             showlegend=False,
         )

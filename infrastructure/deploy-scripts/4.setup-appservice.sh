@@ -22,7 +22,7 @@ az appservice plan create \
     --is-linux \
     --output table
 
-# Web App erstellen, nur wenn sie nicht existiert
+# Create the web app, but only if it does not exist yet
 echo "Creating Web App $WEBAPP_NAME..."
 az webapp create \
     --name $WEBAPP_NAME \
@@ -56,7 +56,7 @@ WEBAPP_IDENTITY=$(az webapp identity assign \
     --resource-group $RESOURCE_GROUP \
     --query principalId -o tsv)
 
-# Warte, bis die Identity in Azure AD verfügbar ist
+# Wait until the identity is visible in Azure AD
 echo "Waiting for Managed Identity to propagate..."
 for i in {1..10}; do
     STATUS=$(az ad sp show --id $WEBAPP_IDENTITY --query "appId" -o tsv 2>/dev/null || echo "")

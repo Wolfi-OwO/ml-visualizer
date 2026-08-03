@@ -15,6 +15,7 @@ def load_stylesheet(path: Path) -> str:
 # --- CONFIG ---
 st.set_page_config(
     page_title="ML Visualizer - Interactive Machine Learning Diagrams",
+    page_icon=str(SRC_DIR / "assets" / "favicon.png"),
     layout="wide",
     initial_sidebar_state="expanded",
 )
