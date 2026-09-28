@@ -1,275 +1,121 @@
-# DSAI Webapp - Interactive Machine Learning Demonstrations
+<div align="center">
 
-A production-ready web application for visualizing machine learning algorithms including Gradient Descent, Perceptron, KNN, and Neural Networks. Built with Streamlit and deployed on Azure with complete CI/CD pipelines.
+# ML Visualizer
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Four classical machine learning algorithms, explained by watching them run.**
+A Streamlit app where every plot is live: drag a slider and the gradient descent step, the perceptron weight or the KNN classification recomputes in front of you.
+
+[![pipeline status](https://gitlab.com/WoofiOwO/5bhif-datascience-webapp/badges/main/pipeline.svg)](https://gitlab.com/WoofiOwO/5bhif-datascience-webapp/-/commits/main)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+
+![Python](https://img.shields.io/badge/Python-3.12-3776ab?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-ff4b4b?logo=streamlit&logoColor=white)
+
+</div>
+
+![ML Visualizer — starting the gradient descent animation and watching the step marker roll down the curve](docs/demo/ml-visualizer-demo.gif)
+
+<div align="center"><sub>Starting the Gradient Descent animation and watching it step down the curve.<br/>Also available as <a href="docs/demo/ml-visualizer-demo.mp4">full-resolution video</a> (60 fps).</sub></div>
 
 ## Features
 
-- Interactive real-time ML algorithm demonstrations
-- Multiple algorithms: Gradient Descent, Perceptron, KNN, Neural Networks
-- Production-ready with multi-stage Docker builds and auto-scaling
-- Complete CI/CD pipeline with automated testing and deployment
-- Three environments: Testing, Staging, and Production
-- Infrastructure as Code using Azure Bicep templates
-- Comprehensive monitoring with Application Insights and alerts
+### Home
 
-## Quick Start
+![ML Visualizer homepage — links to the four algorithm pages with a short explanation of each](docs/screenshots/homepage.png)
 
-### Local Development
+- Landing page (in German, like the rest of the app) that explains in three short paragraphs what each of the four pages does and where it gets interesting to poke at — an unreasonable learning rate, a `k` larger than half the point cloud.
+
+### Gradient Descent
+
+![Gradient Descent Visualizer — a parabola with the current step marked, sliders for start value, learning rate and iteration count](docs/screenshots/gradient-descent.png)
+
+- Minimizes `f(x) = 0.5x²` from a configurable start value, learning rate and iteration count, either step-by-step or animated with Start/Stop.
+- The step history is memoized with `st.cache_data`, so replaying the same parameters (e.g. after switching tabs and back) does not recompute it.
+
+### Perceptron
+
+![Perceptron page — a single neuron diagram with live weight, bias and output values, trained on the AND truth table](docs/screenshots/perceptron.png)
+
+- A single neuron with two inputs, trained on the AND truth table, with the diagram, current weights, bias and epoch stepping through training live.
+- Learning rate, epoch count and the random seed used to initialize the weights are all adjustable, so a run is reproducible.
+
+### KNN Visualizer
+
+![K-Nearest Neighbors page — a scatter plot of two labeled point clusters and unclassified points to be labeled](docs/screenshots/knn-visualizer.png)
+
+- Add points by hand or start from a seeded two-cluster point cloud, pick `k`, and classify — unlabeled points take the majority class of their `k` nearest neighbors.
+
+### Neural Network
+
+![Neuronales Netz page — a 2-2-1 network diagram with per-neuron weights, activations, loss and accuracy for the AND function](docs/screenshots/neural-network.png)
+
+- The same AND function as the perceptron page, this time with a hidden layer and backpropagation, showing every weight, the hidden-layer activations and the loss/accuracy curve per epoch.
+- Snapshots per training epoch let you scrub back through a run instead of only ever seeing the final weights.
+
+## Why it is built this way
+
+- Every algorithm lives on its own `st.Page` (`src/pages/*.py`) registered in `src/app.py` — no shared page router to keep in sync, and a page can be added or removed without touching the others.
+- Random seeds (perceptron init, the KNN starting cloud, the neural net's weight init) are fixed by default rather than reseeded per run, so a demo is reproducible instead of a different plot on every reload.
+- The app deploys to **Azure Container Apps**, which scale to zero when idle. `infrastructure/deploy-scripts/4.setup-appservice.sh` targets an older, PaaS-based Azure hosting model and is a leftover from an earlier iteration; the scripts GitLab CI actually runs (`5.configure-container-app-acr.sh` and the inline `az containerapp` calls in `.gitlab-ci.yml`) are the current path.
+
+## Tech stack
+
+| Layer         | Tech                                                     |
+| ------------- | --------------------------------------------------------- |
+| Application   | Python 3.12, Streamlit, NumPy, Pandas, Altair, Plotly     |
+| Testing       | pytest, pytest-cov                                        |
+| Code quality  | Ruff, Black, pre-commit                                   |
+| Container     | Docker (multi-stage build), Docker Compose                |
+| CI/CD         | GitLab CI                                                  |
+| Cloud         | Azure Container Apps, Azure Container Registry            |
+
+## Getting started
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd Datascience-ArtificialIntelligence-Webpage
-
-# Start with Docker Compose (recommended)
-docker compose -f docker-compose.dev.yml up
-
-# Or without Docker
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 streamlit run src/app.py
 ```
 
-Visit <http://localhost:8501>
+Visit <http://localhost:8501>.
 
-### Run Tests
+Or with Docker:
+
+```bash
+docker compose -f docker/docker-compose.dev.yml up
+```
+
+Run the tests:
 
 ```bash
 pip install -r requirements.txt
-pytest tests/ -v --cov=src --cov-report=html
+pytest src/tests/ -v --cov=src
 ```
 
-## Project Structure
+## Project structure
 
 ```text
 .
-├── .github/workflows/      # CI/CD pipelines
-├── config/                 # Environment configurations
-├── infrastructure/         # Azure Bicep IaC templates
-├── src/                    # Application source code
-│   ├── app.py              # Main entry point
-│   ├── pages/              # ML visualization pages
-│   └── utils/              # Configuration and utilities
-├── tests/                  # Test suite
-├── docker/                 # Docker configurations
-├── Dockerfile              # Production Docker image
-└── docker-compose.*.yml    # Environment-specific compose files
+├── src/                          # Application source
+│   ├── app.py                    # Entry point — registers the pages, renders the footer
+│   ├── pages/                    # One file per algorithm (homepage, gradient-descent, perceptron, knn-visualize, neuronal-net)
+│   ├── utils/                    # Config, versioning, theme colors, neural-network math
+│   ├── styles/                   # Sidebar and page CSS
+│   └── tests/                    # pytest suite (pages, algorithms, utils, integration)
+├── docker/                       # Per-environment Compose files and the dev Dockerfile
+├── infrastructure/deploy-scripts/ # Azure CLI scripts (resource group, ACR, Container App)
+├── landing/                       # Static marketing page served separately from the Streamlit app
+├── organizational/                # Project-management notes (test plans, GitLab API scratch requests)
+├── Dockerfile                     # Production image
+├── .gitlab-ci.yml                 # Pipeline: validate → lint → test → security → build → deploy → release
+└── requirements.txt
 ```
 
-## Deployment Environments
+## CI/CD
 
-| Environment | Branch  | Auto-Deploy | Approval Required |
-|-------------|---------|-------------|-------------------|
-| Testing     | develop | Yes         | No                |
-| Staging     | staging | Yes         | No                |
-| Production  | main    | Yes         | Yes               |
-
-## Architecture
-
-### Deployment Flow
-
-```text
-feature/* → develop → staging → main
-           (testing) (staging) (production)
-```
-
-### Infrastructure Components
-
-- Azure Container Registry: Docker image storage
-- Azure App Service: Application hosting with auto-scaling
-- Application Insights: Monitoring and analytics
-- Log Analytics: Centralized logging
-- Automated alerts: CPU, memory, errors, response time
-
-### Auto-Scaling Configuration
-
-- Scale out when CPU > 70% or Memory > 80%
-- Scale in when CPU < 30% for 10 minutes
-- Instance limits per environment:
-  - Testing: 1-3 instances
-  - Staging: 1-5 instances
-  - Production: 2-10 instances
-
-## Technology Stack
-
-- **Application**: Python 3.12, Streamlit
-- **Containerization**: Docker, Docker Compose
-- **Cloud Platform**: Azure App Service, Azure Container Registry
-- **CI/CD**: GitHub Actions
-- **Infrastructure**: Azure Bicep
-- **Testing**: pytest, pytest-cov
-- **Code Quality**: Ruff (linting and formatting)
-- **Monitoring**: Application Insights, Log Analytics
-
-## Documentation
-
-- **[SETUP.md](SETUP.md)** - Complete setup guide from scratch
-- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Deployment verification checklist
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Common commands and operations
-- **[config/README.md](config/README.md)** - Configuration documentation
-
-## Setup and Deployment
-
-For complete setup instructions, see [SETUP.md](SETUP.md).
-
-Quick overview:
-
-```bash
-# 1. Deploy Azure infrastructure
-./infrastructure/deploy.sh testing westeurope
-./infrastructure/deploy.sh staging westeurope
-./infrastructure/deploy.sh production westeurope
-
-# 2. Configure GitHub secrets (see SETUP.md)
-
-# 3. Deploy application
-git push origin develop   # Deploys to testing
-git push origin staging   # Deploys to staging
-git push origin main      # Deploys to production (requires approval)
-```
-
-## Development Workflow
-
-1. Create feature branch from `develop`
-2. Make changes and add tests
-3. Run tests locally: `pytest tests/ -v`
-4. Commit and push
-5. Create pull request to `develop`
-6. CI pipeline validates changes
-7. After merge, auto-deploy to testing
-8. Promote through staging to production
-
-## Monitoring and Operations
-
-### Health Checks
-
-```bash
-# Check application health
-curl https://ml-visualizer.at/_stcore/health
-```
-
-### View Logs
-
-```bash
-# Stream logs
-az webapp log tail --name ml-visualizer-prod \
-  --resource-group ml-visualizer-production-rg
-```
-
-### Scaling
-
-```bash
-# Manual scale
-az appservice plan update \
-  --name ml-visualizer-production-plan \
-  --resource-group ml-visualizer-production-rg \
-  --number-of-workers 5
-```
-
-## Configuration
-
-Environment-specific configuration files in `/config`:
-
-- `development.env` - Local development
-- `testing.env` - Testing environment
-- `staging.env` - Staging environment
-- `production.env` - Production environment
-
-See [config/README.md](config/README.md) for all available options.
-
-## CI/CD Pipeline
-
-### Workflows
-
-**ci.yml** - Runs on all pushes and pull requests
-
-- Multi-version Python testing (3.10, 3.11, 3.12)
-- Linting and code formatting checks
-- Security vulnerability scanning
-- Docker build validation
-- Test execution with coverage reporting
-
-**deploy-testing.yml** - Deploys to testing environment
-
-- Triggered by push to `develop` branch
-- Builds and pushes Docker image to ACR
-- Deploys to Azure App Service
-- Runs health checks
-
-**deploy-staging.yml** - Deploys to staging environment
-
-- Triggered by push to `staging` branch
-- Includes smoke tests
-- Pre-production validation
-
-**deploy-production.yml** - Deploys to production
-
-- Triggered by push to `main` branch
-- Requires manual approval
-- Creates backup deployment slots
-- Comprehensive health checks
-- Supports rollback
-
-## Security
-
-- Non-root user in Docker containers
-- Multi-stage builds for minimal attack surface
-- Security scanning in CI pipeline
-- HTTPS enforced in production
-- Secrets managed via Azure Key Vault and GitHub Secrets
-- No hardcoded credentials
-- Regular dependency updates
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Make changes and add tests
-4. Run tests: `pytest tests/ -v`
-5. Run linting: `ruff check .`
-6. Commit changes: `git commit -m 'Add new feature'`
-7. Push to branch: `git push origin feature/new-feature`
-8. Create Pull Request
-
-## Troubleshooting
-
-Common issues and solutions are documented in [SETUP.md](SETUP.md#troubleshooting).
-
-Quick checks:
-
-```bash
-# Check Azure resources
-az resource list --resource-group ml-visualizer-production-rg
-
-# Check app service status
-az webapp show --name ml-visualizer-prod \
-  --resource-group ml-visualizer-production-rg --query state
-
-# Restart application
-az webapp restart --name ml-visualizer-prod \
-  --resource-group ml-visualizer-production-rg
-```
+`.gitlab-ci.yml` runs `validate → lint → test → security → build → deploy:review → deploy:production → release → pages → cleanup`. Merge requests get an ephemeral Container App review environment (auto-stopped after a day); pushes to `main` build the image, push it to ACR, and roll it out to the production Container App with a health check before the old revision is retired. GitLab's SAST and dependency-scanning templates run in the security stage.
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Authors
-
-**Kofler Phillip** - HTL V - Informatik
-
-## Acknowledgments
-
-- Built with [Streamlit](https://streamlit.io/)
-- Deployed on [Microsoft Azure](https://azure.microsoft.com/)
-- CI/CD powered by [GitHub Actions](https://github.com/features/actions)
-
----
-
-**Version**: 2.2.2
-**Last Updated**: May 2026
-**Status**: Production Ready
+MIT, see [LICENSE](./LICENSE).
