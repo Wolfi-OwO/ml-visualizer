@@ -1,0 +1,24 @@
+# DSAI webapp (Streamlit). Container lives in the /opt/dsai compose stack and
+# is reachable here because both stacks join the external `edge-net` network.
+# deploy.sh rewrites the dsai-blue/green name on the reverse_proxy line below,
+# so keep that line's shape exactly.
+#
+# No strict script-src CSP: Streamlit serves inline bootstrap scripts and talks
+# to itself over a websocket, so a 'self'-only policy would break the app.
+app.ml-visualizer.at {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    import access_log
+    import error_pages
+
+    reverse_proxy dsai-blue:8080 {
+        import edge_upstream_errors
+    }
+}

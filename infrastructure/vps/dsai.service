@@ -1,0 +1,25 @@
+[Unit]
+Description=DSAI webapp stack (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# The compose file is delivered by the bootstrap, not by this unit; until it
+# lands systemd reports "skipped" instead of "failed".
+ConditionPathExists=/opt/dsai/docker-compose.prod.yml
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Same identity as the CI deploy so both read the same registry login from
+# /home/deploy/.docker/config.json; two identities would make a boot-time pull
+# fail with "unauthorized" while a manual pull works.
+User=deploy
+WorkingDirectory=/opt/dsai
+# Starts only the slot that is live, so a reboot never brings up both. A cold
+# start pulls the image first, hence the generous timeout.
+ExecStart=/bin/sh -c 'docker compose -f docker-compose.prod.yml up -d dsai-$(cat /opt/dsai/active_slot)'
+ExecStop=/usr/bin/docker compose -f docker-compose.prod.yml down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

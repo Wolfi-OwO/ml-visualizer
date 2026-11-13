@@ -1,0 +1,42 @@
+# Production stack for the DSAI Streamlit app on the Contabo VPS. Lives at
+# /opt/dsai/ on the box and joins the external `edge-net` network that the
+# shared Caddy already uses (same layout as /opt/netviz). Run with:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Two identical slots, blue and green: deploy.sh starts the idle one next to
+# the live one, waits for Streamlit's health endpoint, flips Caddy's upstream
+# and only then removes the old slot. /opt/dsai/active_slot names the live one.
+#
+# No host port is published. /etc/docker/daemon.json on this VPS binds
+# published ports to 127.0.0.1 and Caddy is the only process allowed on
+# 0.0.0.0, so the app is reachable only as dsai-blue:8080 / dsai-green:8080
+# on edge-net.
+#
+# Image comes from the project's own GitLab registry; the `deploy` user on the
+# VPS is logged in with a read-only deploy token (~/.docker/config.json).
+
+x-dsai: &dsai-base
+  image: ${IMAGE_REPO:-registry.gitlab.com/woofiowo/5bhif-datascience-webapp}:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file:
+    - .env
+  # Limits are a first guess for a Streamlit + pandas/matplotlib app. They are
+  # re-measured with `docker stats --no-stream` after the first real traffic
+  # and the measured figure is written into docs, not this comment.
+  mem_limit: 512m
+  memswap_limit: 512m
+  cpus: 0.5
+  networks:
+    - edge-net
+
+services:
+  dsai-blue:
+    <<: *dsai-base
+  dsai-green:
+    <<: *dsai-base
+
+networks:
+  # Created once on the host (`docker network create edge-net`), not managed
+  # here, so `docker compose down` never deletes the network Caddy needs.
+  edge-net:
+    external: true

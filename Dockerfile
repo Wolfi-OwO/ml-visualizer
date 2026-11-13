@@ -35,7 +35,7 @@ ARG APP_VERSION=1.0.0
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
-    STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_PORT=8080 \
     STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
     STREAMLIT_SERVER_HEADLESS=true \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
@@ -79,18 +79,18 @@ RUN mkdir -p /app/.streamlit && chown -R appuser:appuser /app/.streamlit
 USER appuser
 
 # Expose port
-EXPOSE 8501
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+    CMD curl --fail http://localhost:8080/_stcore/health || exit 1
 
 # Set stop signal
 STOPSIGNAL SIGTERM
 
 # Run the application
 ENTRYPOINT ["streamlit", "run", "./src/app.py", \
-     "--server.port=8501", \
+     "--server.port=8080", \
      "--server.address=0.0.0.0", \
      "--server.enableCORS=false", \
      "--server.enableXsrfProtection=true", \
