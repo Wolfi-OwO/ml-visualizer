@@ -56,7 +56,7 @@ A Streamlit app where every plot is live: drag a slider and the gradient descent
 
 - Every algorithm lives on its own `st.Page` (`src/pages/*.py`) registered in `src/app.py` — no shared page router to keep in sync, and a page can be added or removed without touching the others.
 - Random seeds (perceptron init, the KNN starting cloud, the neural net's weight init) are fixed by default rather than reseeded per run, so a demo is reproducible instead of a different plot on every reload.
-- The app deploys to **Azure Container Apps**, which scale to zero when idle. `infrastructure/deploy-scripts/4.setup-appservice.sh` targets an older, PaaS-based Azure hosting model and is a leftover from an earlier iteration; the scripts GitLab CI actually runs (`5.configure-container-app-acr.sh` and the inline `az containerapp` calls in `.gitlab-ci.yml`) are the current path.
+- The app runs on a Contabo VPS behind the shared Caddy reverse proxy, as two blue/green container slots, so a deploy only switches traffic once the new container reports healthy. Everything the VPS needs is versioned in `infrastructure/vps/`.
 
 ## Tech stack
 
@@ -67,7 +67,7 @@ A Streamlit app where every plot is live: drag a slider and the gradient descent
 | Code quality  | Ruff, Black, pre-commit                                   |
 | Container     | Docker (multi-stage build), Docker Compose                |
 | CI/CD         | GitLab CI                                                  |
-| Cloud         | Azure Container Apps, Azure Container Registry            |
+| Hosting       | Contabo VPS (Docker Compose, Caddy), GitLab Container Registry |
 
 ## Getting started
 
@@ -104,7 +104,7 @@ pytest src/tests/ -v --cov=src
 │   ├── styles/                   # Sidebar and page CSS
 │   └── tests/                    # pytest suite (pages, algorithms, utils, integration)
 ├── docker/                       # Per-environment Compose files and the dev Dockerfile
-├── infrastructure/deploy-scripts/ # Azure CLI scripts (resource group, ACR, Container App)
+├── infrastructure/vps/            # VPS side of the deploy: compose file, deploy.sh, Caddy block, preview config
 ├── landing/                       # Static marketing page served separately from the Streamlit app
 ├── organizational/                # Project-management notes (test plans, GitLab API scratch requests)
 ├── Dockerfile                     # Production image
@@ -114,7 +114,7 @@ pytest src/tests/ -v --cov=src
 
 ## CI/CD
 
-`.gitlab-ci.yml` runs `validate → lint → test → security → build → deploy:review → deploy:production → release → pages → cleanup`. Merge requests get an ephemeral Container App review environment (auto-stopped after a day); pushes to `main` build the image, push it to ACR, and roll it out to the production Container App with a health check before the old revision is retired. GitLab's SAST and dependency-scanning templates run in the security stage.
+`.gitlab-ci.yml` runs `validate → lint → test → security → build → deploy:review → deploy:production → release → pages`. Every merge request builds an image into the GitLab registry and can start a throwaway preview container on the VPS (manual `deploy-review` job, removed when the MR is merged or closed). A `v*` tag builds the release image; the manual `deploy-production` job then SSHes into the VPS, starts the idle slot, waits for Streamlit's health endpoint, flips Caddy to it and removes the old slot. A failed health check leaves the live slot untouched. GitLab's SAST and dependency-scanning templates run in the security stage. Setup and operations are in [`infrastructure/vps/README.md`](infrastructure/vps/README.md).
 
 ## License
 

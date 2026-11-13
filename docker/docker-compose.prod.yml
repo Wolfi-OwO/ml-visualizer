@@ -10,7 +10,7 @@ services:
       dockerfile: Dockerfile
     container_name: ml-visualizer-prod
     ports:
-      - "8501:8501"
+      - "8501:8080"
     env_file:
       - ./config/production.env
     environment:
@@ -19,7 +19,7 @@ services:
     networks:
       - ml-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/_stcore/health"]
       interval: 120s
       timeout: 10s
       retries: 5

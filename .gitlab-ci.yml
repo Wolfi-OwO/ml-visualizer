@@ -1,12 +1,16 @@
 # =====================================================
-# GitLab CI/CD Pipeline - Dynamic Environments Edition
+# GitLab CI/CD Pipeline
 # =====================================================
-# This pipeline uses:
-# - Dynamic environments based on GitLab variables ($CI_COMMIT_REF_SLUG, $CI_MERGE_REQUEST_IID)
-# - Official GitLab CI templates for Docker builds
-# - Built-in GitLab CI variables (CI_REGISTRY_IMAGE, etc.)
-# - No branch-based staging logic
-# - Auto-stop and cleanup for ephemeral environments
+# Builds the image into the project's own GitLab registry and deploys it to
+# the Contabo VPS over SSH. Nothing here talks to Azure.
+#
+#   merge request  -> build image (tag = short SHA), manual "deploy-review"
+#                     starts a throwaway preview container on the VPS
+#   v* tag         -> build image (tag = git tag), manual "deploy-production"
+#                     does a blue/green rollout on the VPS
+#
+# The VPS side (compose file, deploy.sh, Caddy block, preview app config) is
+# versioned in infrastructure/vps/ and described in its README.
 # =====================================================
 
 include:
@@ -24,32 +28,18 @@ stages:
   - deploy:production
   - release
   - pages
-  - cleanup
 
-image: mcr.microsoft.com/azure-cli:latest
+image: alpine:latest
 
-# =====================================================
-# Variables - Using Built-in GitLab CI Variables Only
-# =====================================================
 variables:
-  DOCKER_IMAGE_NAME: "ml-visualizer"
-  # Use GitLab built-in registry if available, otherwise use custom registry
-  DOCKER_REGISTRY: "${ACR_NAME}.azurecr.io"
-  DOCKER_IMAGE_URI: "${DOCKER_REGISTRY}/ml-visualizer"
-
+  # Built-in registry, no credentials to manage: CI_REGISTRY_* are injected per job.
+  DOCKER_IMAGE_URI: "${CI_REGISTRY_IMAGE}"
   LATEST_TAG: "latest"
-  APP_DIR: "."
+  DEPLOY_USER: "deploy"
 
   # Health Check Configuration
   HEALTH_CHECK_TIMEOUT: "300"
   HEALTH_CHECK_INTERVAL: "10"
-
-  # Deployment Configuration
-  DEPLOYMENT_TIMEOUT: "600"
-
-  # Dynamic Environment Settings
-  REVIEW_APP_AUTO_STOP_IN: "1 day"
-  REVIEW_APP_DEPLOYMENT_TIMEOUT: "300"
 
 # =====================================================
 # VALIDATION STAGE
@@ -68,24 +58,25 @@ check-variables:
   image: alpine:latest
   script:
     - |
-      echo "Validating required GitLab built-in CI variables..."
-      echo "✓ CI_REGISTRY: $DOCKER_REGISTRY"
-      echo "✓ CI_REGISTRY_IMAGE: $DOCKER_IMAGE_URI"
-      echo "✓ CI_REGISTRY_USER: $ACR_USERNAME"
+      echo "Validating CI variables..."
+      echo "✓ Registry image: $DOCKER_IMAGE_URI"
       echo "✓ CI_COMMIT_REF_SLUG: $CI_COMMIT_REF_SLUG"
-      echo "✓ CI_PROJECT_ID: $CI_PROJECT_ID"
 
-      # Check for Azure deployment credentials (only on protected branches/main)
-      if [ "$CI_COMMIT_REF_PROTECTED" = "true" ] || [ "$CI_COMMIT_REF_NAME" = "main" ]; then
-        echo "Running on protected branch - validating Azure credentials..."
-        for var in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID AZURE_WEBAPP_NAME; do
-          if eval "[ -z \"\$$var\" ]"; then
-            echo "⚠ Missing protected variable: $var"
-          else
-            echo "✓ $var: [set]"
-          fi
-        done
+      # The deploy key is protected, so it only exists on protected refs/tags.
+      missing=0
+      for var in VPS_HOST VPS_KNOWN_HOSTS VPS_PREVIEW_KEY PRODUCTION_URL; do
+        if eval "[ -z \"\$$var\" ]"; then
+          echo "✗ Missing variable: $var"
+          missing=1
+        else
+          echo "✓ $var: [set]"
+        fi
+      done
+      if [ -n "$CI_COMMIT_TAG" ] && [ -z "$VPS_DEPLOY_KEY" ]; then
+        echo "✗ Missing protected variable: VPS_DEPLOY_KEY"
+        missing=1
       fi
+      [ "$missing" = "0" ] || exit 1
 
       echo "OK: Variable validation completed"
 
@@ -263,7 +254,7 @@ dependency-audit:
 
 
 # =====================================================
-# BUILD STAGE - Docker Build using Official GitLab Template
+# BUILD STAGE - image into the GitLab registry
 # =====================================================
 
 docker-build:
@@ -272,43 +263,30 @@ docker-build:
   services:
     - docker:dind
   before_script:
-    - |
-      echo "Authenticating with Azure Container Registry..."
-      echo "$ACR_PASSWORD" | docker login -u "$ACR_USERNAME" --password-stdin "$DOCKER_REGISTRY"
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - |
-      # Determine image tag: prefer tag name, fallback to commit SHA
+      # Tag builds are releases (tag = git tag); MR builds are previews (tag = short SHA).
       if [ -n "$CI_COMMIT_TAG" ]; then
         IMAGE_TAG="$CI_COMMIT_TAG"
-        echo "✓ Using tag for production build: $IMAGE_TAG"
       else
         IMAGE_TAG="$CI_COMMIT_SHORT_SHA"
-        echo "✓ Using commit SHA for non-tag build: $IMAGE_TAG"
       fi
-
       echo "$IMAGE_TAG" > image_tag.txt
-    - |
-      echo "Building Docker image..."
+
       docker build \
         -f Dockerfile \
         --build-arg APP_VERSION="${IMAGE_TAG}" \
-        -t "${DOCKER_IMAGE_NAME}:${IMAGE_TAG}" \
-        -t "${DOCKER_IMAGE_NAME}:${LATEST_TAG}" \
+        -t "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
         .
-
-      echo "✓ Docker image built successfully"
-    - |
-      echo "Tagging image for Azure Container Registry..."
-      docker tag "${DOCKER_IMAGE_NAME}:${IMAGE_TAG}" "${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
-      docker tag "${DOCKER_IMAGE_NAME}:${LATEST_TAG}" "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
-
-      echo "Pushing image to Azure Container Registry..."
       docker push "${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
-      docker push "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
 
-      echo "✓ Docker image pushed successfully"
-      echo "  Version tag: ${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
-      echo "  Latest tag: ${DOCKER_IMAGE_URI}:${LATEST_TAG}"
+      # "latest" only ever points at a release, never at an MR preview build.
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
+        docker push "${DOCKER_IMAGE_URI}:${LATEST_TAG}"
+      fi
+      echo "✓ Pushed ${DOCKER_IMAGE_URI}:${IMAGE_TAG}"
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -320,322 +298,103 @@ docker-build:
     expire_in: 1 day
 
 # =====================================================
-# DEPLOY TO REVIEW ENVIRONMENTS (Dynamic)
+# DEPLOY - REVIEW (merge request previews on the VPS)
 # =====================================================
-# These environments are automatically created and destroyed
-# based on merge requests. No branch-based staging logic.
+# /opt/previews/run.sh on the VPS is the only thing the preview key can run.
+# One container per merge request, replaced on every push; it is removed
+# when the MR is merged or closed (environment on_stop) or by stop-review.
+# URL: https://pr-<MR>.dsai.preview.woofi-developments.at (basic auth, see
+# infrastructure/vps/README.md).
 
-.deploy_review_base:
-  stage: deploy:review
-  image: mcr.microsoft.com/azure-cli:latest
-  needs:
-    - job: docker-build
-      artifacts: true
-  rules:
-    # Only for merge requests
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-  before_script:
-    - |
-      echo "Authenticating with Azure..."
-      az login --service-principal \
-        --username "$AZURE_CLIENT_ID" \
-        --password "$AZURE_CLIENT_SECRET" \
-        --tenant "$AZURE_TENANT_ID"
-      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      tdnf install -y curl jq
+.ssh_setup: &ssh_setup
+  - apk add --no-cache openssh-client curl
+  - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+  - printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+  # GitLab writes file variables as 0666 and ssh refuses such a key, so copy it.
+  - |
+    for v in VPS_DEPLOY_KEY VPS_PREVIEW_KEY; do
+      eval "src=\${$v:-}"
+      [ -n "$src" ] && install -m 600 "$src" ~/.ssh/$v
+    done
 
 deploy-review:
-  extends: .deploy_review_base
-  environment:
-    # Dynamic environment name based on commit SHA for staging
-    name: staging/$CI_COMMIT_SHORT_SHA
-    # URL dynamically set after deployment
-    url: https://$REVIEW_APP_FQDN
-    auto_stop_in: $REVIEW_APP_AUTO_STOP_IN
-    deployment_tier: staging
-  script:
-    - |
-      # Load image version
-      IMAGE_TAG=$(cat image_tag.txt)
-      echo "Deploying Docker image version: $IMAGE_TAG"
-
-      # Construct unique app name for this staging environment
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
-
-      echo "Creating/Updating staging environment: $REVIEW_APP_NAME"
-      echo "Environment: staging/$CI_COMMIT_SHORT_SHA" > review-deployment-report.txt
-      echo "Image tag: $IMAGE_TAG" >> review-deployment-report.txt
-      echo "Target: $REVIEW_APP_NAME" >> review-deployment-report.txt
-      echo "Deployment started: $(date)" >> review-deployment-report.txt
-    - |
-      # Create or update Azure Container App
-      if ! az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &>/dev/null; then
-        echo "✓ Creating new staging Container App: $REVIEW_APP_NAME"
-        az containerapp create \
-          --name "$REVIEW_APP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --environment "$CONTAINERAPPS_ENV" \
-          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --registry-server "$DOCKER_REGISTRY" \
-          --registry-username "$ACR_USERNAME" \
-          --registry-password "$ACR_PASSWORD" \
-          --ingress external \
-          --target-port 8501 \
-          --min-replicas 0 \
-          --max-replicas 1 >> review-deployment-report.txt 2>&1 || {
-          echo "✗ Failed to create Container App" >> review-deployment-report.txt
-          exit 1
-        }
-      else
-        echo "✓ Staging Container App exists - updating image..."
-        az containerapp update \
-          --name "$REVIEW_APP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" >> review-deployment-report.txt 2>&1
-
-        # Restart the latest revision
-        REVISION_NAME=$(az containerapp revision list \
-          --name "$REVIEW_APP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --query '[-1].name' -o tsv 2>/dev/null || echo "")
-
-        if [ -n "$REVISION_NAME" ]; then
-          az containerapp revision restart \
-            --name "$REVIEW_APP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$REVISION_NAME" >> review-deployment-report.txt 2>&1
-        fi
-      fi
-    - |
-      # Retrieve FQDN and wait for availability
-      REVIEW_APP_FQDN=$(az containerapp show \
-        --name "$REVIEW_APP_NAME" \
-        --resource-group "$AZURE_RESOURCE_GROUP" \
-        --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null)
-
-      if [ -z "$REVIEW_APP_FQDN" ]; then
-        echo "✗ Could not determine staging Container App FQDN" >> review-deployment-report.txt
-        exit 1
-      fi
-
-      echo "✓ Staging Container App FQDN: $REVIEW_APP_FQDN" >> review-deployment-report.txt
-      export REVIEW_APP_FQDN
-
-      # Perform health checks
-      echo "Performing health checks on https://${REVIEW_APP_FQDN}..."
-      for i in {1..30}; do
-        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${REVIEW_APP_FQDN}" || echo "000")
-        if [ "$response_code" = "200" ]; then
-          echo "✓ Health check passed (attempt $i)" >> review-deployment-report.txt
-          echo "✓ Staging environment is ready!" >> review-deployment-report.txt
-          break
-        fi
-        echo "  Health check attempt $i failed (HTTP $response_code), retrying..." >> review-deployment-report.txt
-        sleep 10
-      done
-
-      echo "Staging deployment completed: $(date)" >> review-deployment-report.txt
-      echo "" >> review-deployment-report.txt
-      echo "Access staging app at: https://${REVIEW_APP_FQDN}"
-  artifacts:
-    when: always
-    paths:
-      - review-deployment-report.txt
-    expire_in: 1 week
-
-stop-review:
-  extends: .deploy_review_base
-  when: manual
-  allow_failure: true
-  environment:
-    name: staging/$CI_COMMIT_SHORT_SHA
-    action: stop
-  script:
-    - |
-      echo "Stopping staging environment: staging/$CI_COMMIT_SHORT_SHA"
-
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
-
-      echo "Deleting Azure Container App: $REVIEW_APP_NAME" > review-stop-report.txt
-
-      if az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-        echo "✓ Found Container App - deleting..."
-        az containerapp delete \
-          --name "$REVIEW_APP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --yes >> review-stop-report.txt 2>&1 || {
-          echo "⚠ Deletion returned non-zero exit code (may already be deleted)" >> review-stop-report.txt
-        }
-      else
-        echo "✓ Staging Container App already deleted" >> review-stop-report.txt
-      fi
-
-      echo "Staging environment cleanup completed: $(date)" >> review-stop-report.txt
-
-
-# =====================================================
-# DEPLOY TO PRODUCTION
-# =====================================================
-# Production deployments run only on tags
-# Requires manual trigger for safety
-
-.deploy_production_base:
-  stage: deploy:production
-  image: mcr.microsoft.com/azure-cli:latest
+  stage: deploy:review
   needs:
     - job: docker-build
       artifacts: true
-
   rules:
-    # Only for tagged releases
-    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
+  environment:
+    name: review/$CI_MERGE_REQUEST_IID
+    url: https://pr-$CI_MERGE_REQUEST_IID.dsai.preview.woofi-developments.at
+    on_stop: stop-review
+    auto_stop_in: 3 days
   before_script:
+    - *ssh_setup
+  script:
     - |
-      echo "Authenticating with Azure..."
-      if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$AZURE_TENANT_ID" ]; then
-        echo "✗ Missing Azure credentials"
-        exit 1
-      fi
+      IMAGE_TAG=$(cat image_tag.txt)
+      ssh -i ~/.ssh/VPS_PREVIEW_KEY "${DEPLOY_USER}@${VPS_HOST}" \
+        "create dsai ${CI_MERGE_REQUEST_IID} ${CI_COMMIT_SHORT_SHA} ${IMAGE_TAG}"
 
-      az login --service-principal \
-        --username "$AZURE_CLIENT_ID" \
-        --password "$AZURE_CLIENT_SECRET" \
-        --tenant "$AZURE_TENANT_ID"
+stop-review:
+  stage: deploy:review
+  needs: []
+  variables:
+    GIT_STRATEGY: none
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+  environment:
+    name: review/$CI_MERGE_REQUEST_IID
+    action: stop
+  before_script:
+    - *ssh_setup
+  script:
+    - ssh -i ~/.ssh/VPS_PREVIEW_KEY "${DEPLOY_USER}@${VPS_HOST}" "destroy dsai ${CI_MERGE_REQUEST_IID}"
 
-      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-      tdnf install -y curl jq
+# =====================================================
+# DEPLOY - PRODUCTION (blue/green on the VPS)
+# =====================================================
+# /opt/dsai/deploy.sh is the only command the deploy key can run. It pulls the
+# tag, starts the idle slot, waits for Streamlit's health endpoint, flips
+# Caddy and removes the old slot; a failed health check leaves the live slot
+# untouched. Rolling back is re-running this job for an older tag.
 
 deploy-production:
-  extends: .deploy_production_base
+  stage: deploy:production
+  needs:
+    - job: docker-build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
   environment:
     name: production
-    url: https://$PRODUCTION_FQDN
-    deployment_tier: production
-    on_stop: stop-production
+    url: $PRODUCTION_URL
+  before_script:
+    - *ssh_setup
   script:
     - |
-      # Load image version
       IMAGE_TAG=$(cat image_tag.txt)
-      echo "Deploying Docker image version: $IMAGE_TAG"
-
-      PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
-
-      echo "Deploying to production: $PRODUCTION_WEBAPP_NAME" > production-deployment-report.txt
-      echo "Image tag: $IMAGE_TAG" >> production-deployment-report.txt
-      echo "Deployment started: $(date)" >> production-deployment-report.txt
+      echo "Deploying ${IMAGE_TAG} to ${VPS_HOST}..."
+      ssh -i ~/.ssh/VPS_DEPLOY_KEY "${DEPLOY_USER}@${VPS_HOST}" "${IMAGE_TAG}"
     - |
-      # Create or update production Container App
-      if ! az containerapp show --name "$PRODUCTION_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" &>/dev/null; then
-        echo "✓ Creating new production Container App: $PRODUCTION_WEBAPP_NAME"
-        az containerapp create \
-          --name "$PRODUCTION_WEBAPP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --environment "$CONTAINERAPPS_ENV" \
-          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --registry-server "$DOCKER_REGISTRY" \
-          --registry-username "$ACR_USERNAME" \
-          --registry-password "$ACR_PASSWORD" \
-          --ingress external \
-          --target-port 8501 \
-          --min-replicas "${PRODUCTION_MIN_REPLICAS:-0}" \
-          --max-replicas "${PRODUCTION_MAX_REPLICAS:-3}" >> production-deployment-report.txt 2>&1 || {
-          echo "✗ Failed to create Container App" >> production-deployment-report.txt
-          exit 1
-        }
-      else
-        echo "✓ Production Container App exists - updating image..."
-        az containerapp update \
-          --name "$PRODUCTION_WEBAPP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --image "${DOCKER_IMAGE_URI}:${IMAGE_TAG}" \
-          --set template.scale.minReplicas="${PRODUCTION_MIN_REPLICAS:-0}" \
-                 template.scale.maxReplicas="${PRODUCTION_MAX_REPLICAS:-3}" >> production-deployment-report.txt 2>&1
-
-        # Restart the latest revision
-        REVISION_NAME=$(az containerapp revision list \
-          --name "$PRODUCTION_WEBAPP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --query '[-1].name' -o tsv 2>/dev/null || echo "")
-
-        if [ -n "$REVISION_NAME" ]; then
-          az containerapp revision restart \
-            --name "$PRODUCTION_WEBAPP_NAME" \
-            --resource-group "$AZURE_RESOURCE_GROUP" \
-            --revision "$REVISION_NAME" >> production-deployment-report.txt 2>&1
+      # deploy.sh already gated the cutover on a healthy container; this is the
+      # end-to-end check through DNS, TLS and Caddy.
+      attempts=$((HEALTH_CHECK_TIMEOUT / HEALTH_CHECK_INTERVAL))
+      for i in $(seq 1 "$attempts"); do
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' "${PRODUCTION_URL}/_stcore/health")" = "200" ]; then
+          echo "✓ ${PRODUCTION_URL} is healthy (attempt $i)"
+          exit 0
         fi
-      fi
-    - |
-      # Retrieve FQDN
-      PRODUCTION_FQDN=$(az containerapp show \
-        --name "$PRODUCTION_WEBAPP_NAME" \
-        --resource-group "$AZURE_RESOURCE_GROUP" \
-        --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null)
-
-      if [ -z "$PRODUCTION_FQDN" ]; then
-        echo "✗ Could not determine production Container App FQDN" >> production-deployment-report.txt
-        exit 1
-      fi
-
-      echo "✓ Production Container App FQDN: $PRODUCTION_FQDN" >> production-deployment-report.txt
-      export PRODUCTION_FQDN
-
-      echo "Waiting 30s for production container app to warm up..." >> production-deployment-report.txt
-      sleep 30
-    - |
-      # Production health checks (critical stage)
-      echo "Performing CRITICAL production health checks against https://${PRODUCTION_FQDN}..."
-      for i in {1..60}; do
-        response_code=$(curl -s -o /dev/null -w "%{http_code}" "https://${PRODUCTION_FQDN}" || echo "000")
-        if [ "$response_code" = "200" ]; then
-          echo "✓ Production health check PASSED (attempt $i)" >> production-deployment-report.txt
-          echo "✓ Production environment is ready!" >> production-deployment-report.txt
-          break
-        fi
-        echo "  Health check attempt $i failed (HTTP $response_code), retrying..." >> production-deployment-report.txt
-        sleep 10
+        echo "  attempt $i: not healthy yet, retrying..."
+        sleep "$HEALTH_CHECK_INTERVAL"
       done
-
-      if [ "$response_code" != "200" ]; then
-        echo "✗ CRITICAL: Production health check FAILED" >> production-deployment-report.txt
-        exit 1
-      fi
-    - |
-      echo "✓ PRODUCTION DEPLOYMENT SUCCESSFUL!"
-      echo "Production deployment completed: $(date)" >> production-deployment-report.txt
-      echo "Access production at: https://${PRODUCTION_FQDN}"
-  artifacts:
-    when: always
-    paths:
-      - production-deployment-report.txt
-    expire_in: 1 week
-
-stop-production:
-  extends: .deploy_production_base
-  when: manual
-  allow_failure: true
-  environment:
-    name: production
-    action: stop
-  script:
-    - |
-      echo "Stopping production environment" > production-stop-report.txt
-
-      PRODUCTION_WEBAPP_NAME="${AZURE_WEBAPP_NAME}"
-
-      echo "Stopping production Container App: $PRODUCTION_WEBAPP_NAME" >> production-stop-report.txt
-
-      if az containerapp show --name "$PRODUCTION_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-        echo "✓ Found Container App - stopping..."
-        az containerapp stop \
-          --name "$PRODUCTION_WEBAPP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" >> production-stop-report.txt 2>&1
-      else
-        echo "✓ Production Container App already stopped" >> production-stop-report.txt
-      fi
-
-      echo "Production stop completed: $(date)" >> production-stop-report.txt
+      echo "✗ ${PRODUCTION_URL} never answered 200 on /_stcore/health"
+      exit 1
 
 
 # =====================================================
@@ -657,39 +416,3 @@ pages:
   artifacts:
     paths:
       - public
-
-# =====================================================
-# CLEANUP STAGE - Environment Auto-Stop
-# =====================================================
-# Automatic cleanup of staging environments
-
-cleanup-review:
-  stage: cleanup
-  image: mcr.microsoft.com/azure-cli:latest
-  rules:
-    # Run only for closed/merged merge requests
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_STATE == "closed"'
-  before_script:
-    - |
-      az login --service-principal \
-        --username "$AZURE_CLIENT_ID" \
-        --password "$AZURE_CLIENT_SECRET" \
-        --tenant "$AZURE_TENANT_ID"
-
-      az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-  script:
-    - |
-      echo "Cleaning up staging environments..."
-
-      REVIEW_APP_NAME="${AZURE_WEBAPP_NAME}-staging-${CI_COMMIT_SHORT_SHA}"
-
-      if az containerapp show --name "$REVIEW_APP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1; then
-        echo "✓ Deleting orphaned staging app: $REVIEW_APP_NAME"
-        az containerapp delete \
-          --name "$REVIEW_APP_NAME" \
-          --resource-group "$AZURE_RESOURCE_GROUP" \
-          --yes 2>&1 || echo "✓ Already deleted or in deletion process"
-      else
-        echo "✓ Staging app $REVIEW_APP_NAME not found (already cleaned up)"
-      fi
-  allow_failure: true
