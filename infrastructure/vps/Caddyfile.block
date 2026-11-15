@@ -8,7 +8,12 @@
 app.ml-visualizer.at {
     encode zstd gzip
 
+    # Streamlit renders in the browser, so Google only ever fetches an empty
+    # shell ("crawled, currently not indexed" in Search Console). The static
+    # landing page at ml-visualizer.at is the indexable surface; keep the app
+    # out of the index on purpose instead of leaving it as a permanent error.
     header {
+        X-Robots-Tag "noindex"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
