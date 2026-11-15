@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1420">
+<title>k-Nearest-Neighbors erklärt: Klassifikation über Nachbarn | ML Visualizer</title>
+<meta name="description" content="k-Nearest-Neighbors anschaulich: euklidischer Abstand, Mehrheitsentscheid, die Wahl von k und warum ein ungerades k Gleichstände vermeidet.">
+<meta name="author" content="Phillip Kofler">
+<link rel="canonical" href="https://ml-visualizer.at/k-nearest-neighbors/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="ML Visualizer">
+<meta property="og:title" content="k-Nearest-Neighbors erklärt: Klassifikation über Nachbarn">
+<meta property="og:description" content="k-Nearest-Neighbors anschaulich: euklidischer Abstand, Mehrheitsentscheid, die Wahl von k und warum ein ungerades k Gleichstände vermeidet.">
+<meta property="og:url" content="https://ml-visualizer.at/k-nearest-neighbors/">
+<meta property="og:image" content="https://ml-visualizer.at/assets/k-nearest-neighbors.webp">
+<meta property="og:locale" content="de_AT">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "k-Nearest-Neighbors: die Nachbarn entscheiden",
+  "description": "k-Nearest-Neighbors anschaulich: euklidischer Abstand, Mehrheitsentscheid, die Wahl von k und warum ein ungerades k Gleichstände vermeidet.",
+  "inLanguage": "de-AT",
+  "datePublished": "2026-11-15",
+  "dateModified": "2026-11-15",
+  "mainEntityOfPage": "https://ml-visualizer.at/k-nearest-neighbors/",
+  "image": "https://ml-visualizer.at/assets/k-nearest-neighbors.webp",
+  "author": {
+    "@type": "Person",
+    "name": "Phillip Kofler",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "ML Visualizer",
+    "url": "https://ml-visualizer.at/"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ML Visualizer",
+      "item": "https://ml-visualizer.at/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "k-Nearest-Neighbors",
+      "item": "https://ml-visualizer.at/k-nearest-neighbors/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="var(--panel)"/>
+        <path d="M4 8 Q16 30 28 8" fill="none" stroke="var(--muted)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="24.5" r="3.4" fill="var(--signal)"/>
+      </svg>
+      <span class="brand-parent">woofi-developments</span><span class="brand-sep">/</span><span class="brand-name">ml-visualizer</span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <a class="text-link" href="/gradient-descent/">Gradient Descent</a>
+      <a class="text-link" href="/perceptron/">Perceptron</a>
+      <a class="text-link" aria-current="page" href="/k-nearest-neighbors/">k-Nearest-Neighbors</a>
+      <a class="text-link" href="/neuronales-netz/">Feedforward-Netz</a>
+      <a class="btn btn-ghost" href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content">
+  <article class="article">
+    <div class="wrap">
+      <nav class="crumbs" aria-label="Brotkrümel">
+        <a href="/">ML Visualizer</a><span aria-hidden="true">/</span><span aria-current="page">k-Nearest-Neighbors</span>
+      </nav>
+      <header class="article-head">
+        <p class="eyebrow">Erklärt</p>
+        <h1>k-Nearest-Neighbors: die Nachbarn entscheiden</h1>
+        <p class="lede">Dieses Verfahren trainiert nichts. Es merkt sich einfach alle Beispiele und fragt bei einem neuen Punkt, wer in seiner Nähe wohnt. Genau deshalb eignet es sich gut, um zu sehen, wie sehr eine einzige Zahl, das k, das Ergebnis bestimmt.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://app.ml-visualizer.at/knn-visualize" rel="noopener">Live ausprobieren &rarr;</a>
+        </div>
+      </header>
+
+      <figure class="shot">
+        <img src="/assets/k-nearest-neighbors.webp" width="1440" height="900" alt="Screenshot des k-Nearest-Neighbors-Moduls: Zwei Punktwolken in zwei Klassen und die k nächsten Nachbarn eines noch nicht eingeordneten Punkts." fetchpriority="high">
+        <figcaption class="caption">Das Modul in der App, mit den Voreinstellungen.</figcaption>
+      </figure>
+
+      <div class="prose">
+<h2>Die Idee</h2>
+<p>Gegeben sind Punkte mit bekannter Klasse. Für einen neuen Punkt sucht k-Nearest-Neighbors die <code>k</code> nächstgelegenen bekannten Punkte und übernimmt die Klasse, die unter ihnen am häufigsten vorkommt. Eine Trainingsphase gibt es nicht: Die Daten selbst sind das Modell.</p>
+
+<h2>Die Rechnung</h2>
+<pre class="formula"><code>d(p, q) = √( (p₁ − q₁)² + (p₂ − q₂)² )</code></pre>
+<ol>
+<li>Berechne den euklidischen Abstand des neuen Punkts zu jedem bekannten Punkt.</li>
+<li>Sortiere die bekannten Punkte nach diesem Abstand.</li>
+<li>Nimm die ersten <code>k</code> und zähle ihre Klassen.</li>
+<li>Die Klasse mit den meisten Stimmen gewinnt.</li>
+</ol>
+<p>Die App startet mit zwei Punktwolken, eine um (0,3 | 0,3) und eine um (0,7 | 0,7), erzeugt mit festem Seed, damit jeder Aufruf dasselbe Bild zeigt. Die Voreinstellung ist <code>k = 3</code>, der Regler reicht von 1 bis 15.</p>
+
+<h3>Warum k so wichtig ist</h3>
+<table class="params">
+<thead><tr><th scope="col">k</th><th scope="col">Effekt</th></tr></thead>
+<tbody>
+<tr><td>sehr klein (1)</td><td>folgt jedem einzelnen Ausreißer, die Entscheidungsgrenze wird zackig</td></tr>
+<tr><td>mittel</td><td>glättet Ausreißer, hält aber lokale Strukturen</td></tr>
+<tr><td>sehr groß</td><td>mittelt so weit, dass am Ende fast überall die größte Klasse gewinnt</td></tr>
+</tbody>
+</table>
+
+<h2>In der App ausprobieren</h2>
+<ul>
+<li>Setze eigene Punkte, am besten einen Ausreißer der einen Klasse mitten in die andere Wolke, und vergleiche, wie <code>k = 1</code> und <code>k = 5</code> ihn behandeln.</li>
+<li>Platziere einen offenen Punkt genau zwischen den Wolken und sieh zu, wie sich die Entscheidung mit <code>k</code> ändert.</li>
+<li>Starte die Animation: Die Nachbarn tauchen einzeln auf, und du siehst, welche Stimmen den Ausschlag geben.</li>
+</ul>
+
+<h2>Typische Stolperstellen</h2>
+<ul>
+<li><strong>Gleichstand.</strong> Bei geradem <code>k</code> kann es genauso viele Stimmen für beide Klassen geben. Diese Implementierung entscheidet dann zugunsten von Klasse A, ein guter Grund, <code>k</code> ungerade zu wählen.</li>
+<li><strong>Skalierung der Merkmale.</strong> Der Abstand behandelt alle Achsen gleich. Hat ein Merkmal einen viel größeren Wertebereich, dominiert es die Nachbarschaft, deshalb werden die Daten in der Praxis vorher normiert.</li>
+<li><strong>Rechenaufwand.</strong> Jede Anfrage vergleicht mit allen gespeicherten Punkten. Bei großen Datenmengen braucht man Hilfsstrukturen wie k-d-Bäume.</li>
+</ul>
+      </div>
+
+      <aside class="cta-box" aria-labelledby="cta-title">
+        <h2 id="cta-title">Selbst ausprobieren</h2>
+        <p>Alles, was oben steht, kannst du in der App nachstellen. Kein Konto, nichts zu installieren.</p>
+        <a class="btn btn-primary" href="https://app.ml-visualizer.at/knn-visualize" rel="noopener">k-Nearest-Neighbors öffnen &rarr;</a>
+      </aside>
+
+      <nav class="related" aria-labelledby="related-title">
+        <h2 id="related-title">Die anderen Module</h2>
+        <div class="related-grid">
+        <a class="related-link" href="/gradient-descent/">
+          <span class="path">/gradient-descent/</span>
+          <strong>Gradient Descent</strong>
+        </a>
+        <a class="related-link" href="/perceptron/">
+          <span class="path">/perceptron/</span>
+          <strong>Perceptron</strong>
+        </a>
+        <a class="related-link" href="/neuronales-netz/">
+          <span class="path">/neuronales-netz/</span>
+          <strong>Feedforward-Netz</strong>
+        </a>
+        </div>
+      </nav>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>
+      Ein Projekt von <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>
+      &middot; Phillip Kofler
+      &middot; <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a>
+    </span>
+    <span class="links">
+      <a href="/">Startseite</a>
+      <a href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

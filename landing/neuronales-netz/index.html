@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1420">
+<title>Neuronales Netz erklärt: Forward-Pass und Backpropagation (2-2-1) | ML Visualizer</title>
+<meta name="description" content="Ein 2-2-1-Netz lernt AND: Sigmoid, Forward-Pass, binäre Kreuzentropie und Backpropagation, mit Gewichten und Snapshots pro Epoche zum Nachsehen.">
+<meta name="author" content="Phillip Kofler">
+<link rel="canonical" href="https://ml-visualizer.at/neuronales-netz/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="ML Visualizer">
+<meta property="og:title" content="Neuronales Netz erklärt: Forward-Pass und Backpropagation (2-2-1)">
+<meta property="og:description" content="Ein 2-2-1-Netz lernt AND: Sigmoid, Forward-Pass, binäre Kreuzentropie und Backpropagation, mit Gewichten und Snapshots pro Epoche zum Nachsehen.">
+<meta property="og:url" content="https://ml-visualizer.at/neuronales-netz/">
+<meta property="og:image" content="https://ml-visualizer.at/assets/neuronales-netz.webp">
+<meta property="og:locale" content="de_AT">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Feedforward-Netz: Backpropagation zum Anfassen",
+  "description": "Ein 2-2-1-Netz lernt AND: Sigmoid, Forward-Pass, binäre Kreuzentropie und Backpropagation, mit Gewichten und Snapshots pro Epoche zum Nachsehen.",
+  "inLanguage": "de-AT",
+  "datePublished": "2026-11-15",
+  "dateModified": "2026-11-15",
+  "mainEntityOfPage": "https://ml-visualizer.at/neuronales-netz/",
+  "image": "https://ml-visualizer.at/assets/neuronales-netz.webp",
+  "author": {
+    "@type": "Person",
+    "name": "Phillip Kofler",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "ML Visualizer",
+    "url": "https://ml-visualizer.at/"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ML Visualizer",
+      "item": "https://ml-visualizer.at/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Feedforward-Netz",
+      "item": "https://ml-visualizer.at/neuronales-netz/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="var(--panel)"/>
+        <path d="M4 8 Q16 30 28 8" fill="none" stroke="var(--muted)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="24.5" r="3.4" fill="var(--signal)"/>
+      </svg>
+      <span class="brand-parent">woofi-developments</span><span class="brand-sep">/</span><span class="brand-name">ml-visualizer</span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <a class="text-link" href="/gradient-descent/">Gradient Descent</a>
+      <a class="text-link" href="/perceptron/">Perceptron</a>
+      <a class="text-link" href="/k-nearest-neighbors/">k-Nearest-Neighbors</a>
+      <a class="text-link" aria-current="page" href="/neuronales-netz/">Feedforward-Netz</a>
+      <a class="btn btn-ghost" href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content">
+  <article class="article">
+    <div class="wrap">
+      <nav class="crumbs" aria-label="Brotkrümel">
+        <a href="/">ML Visualizer</a><span aria-hidden="true">/</span><span aria-current="page">Feedforward-Netz</span>
+      </nav>
+      <header class="article-head">
+        <p class="eyebrow">Erklärt</p>
+        <h1>Feedforward-Netz: Backpropagation zum Anfassen</h1>
+        <p class="lede">Ein Netz mit zwei Eingängen, zwei verborgenen Neuronen und einem Ausgang ist klein genug, dass man jedes Gewicht lesen kann, und groß genug, dass alle Bestandteile echter Netze vorkommen: Aktivierung, Fehlermaß, Rückwärtsrechnung, Gewichtsupdate.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://app.ml-visualizer.at/neuronal-net" rel="noopener">Live ausprobieren &rarr;</a>
+        </div>
+      </header>
+
+      <figure class="shot">
+        <img src="/assets/neuronales-netz.webp" width="1440" height="900" alt="Screenshot des Neuronalen-Netz-Moduls: Ein 2-2-1-Netz mit Gewichten und Aktivierungen an jedem Neuron, daneben Fehlerkurve und Wahrheitstabelle." fetchpriority="high">
+        <figcaption class="caption">Das Modul in der App, mit den Voreinstellungen.</figcaption>
+      </figure>
+
+      <div class="prose">
+<h2>Die Idee</h2>
+<p>Ein Feedforward-Netz reicht Werte nur in eine Richtung weiter: Eingabe, verborgene Schicht, Ausgabe. Jedes Neuron bildet eine gewichtete Summe, addiert einen Bias und schickt das Ergebnis durch eine Aktivierungsfunktion. Trainiert wird, indem man den Fehler der Ausgabe rückwärts durch das Netz verteilt und jedes Gewicht ein Stück in die Richtung schiebt, die den Fehler verkleinert.</p>
+
+<h2>Die Rechnung</h2>
+<pre class="formula"><code>σ(z)  = 1 / (1 + e^(−z))
+h     = σ(W₁·x + b₁)       // zwei verborgene Neuronen
+ŷ     = σ(w₂·h + b₂)       // ein Ausgangsneuron
+L     = −mittel( y·log ŷ + (1 − y)·log(1 − ŷ) )
+w     ← w − η · ∂L/∂w</code></pre>
+<p>Die Sigmoid-Funktion <code>σ</code> drückt jede Summe auf einen Wert zwischen 0 und 1. Das Netz sagt Klasse 1 voraus, wenn <code>ŷ ≥ 0,5</code> ist. Das Fehlermaß ist die binäre Kreuzentropie, sie bestraft sichere Fehlentscheidungen besonders stark. Die Gradienten <code>∂L/∂w</code> entstehen mit der Kettenregel, von der Ausgabe rückwärts zu den Eingängen, das ist die <em>Backpropagation</em>. Pro Epoche werden die Gradienten über alle vier Eingabemuster gemittelt.</p>
+<p>Gelernt wird die AND-Wahrheitstabelle wie im <a href="/perceptron/">Perceptron-Modul</a>. Für AND bräuchte es die verborgene Schicht eigentlich nicht, das Netz dient hier dazu, jeden Rechenschritt sichtbar zu machen.</p>
+
+<h2>In der App ausprobieren</h2>
+<ul>
+<li>Der Regler <em>Signalfluss</em> führt in fünf Schritten vom Eingang zum Ausgang: Eingaben, Summen der verborgenen Neuronen, deren Aktivierungen, Beitrag zur Ausgabe, Ausgabe selbst.</li>
+<li>Die Voreinstellung ist Lernrate 0,3, 300 Epochen und Seed 1. Ändere den Seed, und die Anfangsgewichte und damit der Weg der Fehlerkurve ändern sich.</li>
+<li>Jeder Trainingsstand liegt als Snapshot vor. Springe durch die Epochen und beobachte, wie Gewichte, Fehler und Wahrheitstabelle zusammenhängen.</li>
+<li>Setze Gewichte und Biases von Hand und schau, wie schnell das Netz ohne Training falsch liegt.</li>
+</ul>
+
+<h2>Typische Stolperstellen</h2>
+<ul>
+<li><strong>Lernrate.</strong> Wie beim <a href="/gradient-descent/">Gradient Descent</a> gilt: zu klein, und die Fehlerkurve sinkt kaum, zu groß, und sie springt.</li>
+<li><strong>Startgewichte.</strong> Wären alle Gewichte gleich, würden beide verborgenen Neuronen immer dasselbe lernen. Der Zufallsstart bricht diese Symmetrie.</li>
+<li><strong>Genauigkeit ist nicht Fehler.</strong> Die Genauigkeit kann schon bei 100 % liegen, während der Fehler noch weiter sinkt, weil die Ausgabe sicherer wird.</li>
+</ul>
+      </div>
+
+      <aside class="cta-box" aria-labelledby="cta-title">
+        <h2 id="cta-title">Selbst ausprobieren</h2>
+        <p>Alles, was oben steht, kannst du in der App nachstellen. Kein Konto, nichts zu installieren.</p>
+        <a class="btn btn-primary" href="https://app.ml-visualizer.at/neuronal-net" rel="noopener">Feedforward-Netz öffnen &rarr;</a>
+      </aside>
+
+      <nav class="related" aria-labelledby="related-title">
+        <h2 id="related-title">Die anderen Module</h2>
+        <div class="related-grid">
+        <a class="related-link" href="/gradient-descent/">
+          <span class="path">/gradient-descent/</span>
+          <strong>Gradient Descent</strong>
+        </a>
+        <a class="related-link" href="/perceptron/">
+          <span class="path">/perceptron/</span>
+          <strong>Perceptron</strong>
+        </a>
+        <a class="related-link" href="/k-nearest-neighbors/">
+          <span class="path">/k-nearest-neighbors/</span>
+          <strong>k-Nearest-Neighbors</strong>
+        </a>
+        </div>
+      </nav>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>
+      Ein Projekt von <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>
+      &middot; Phillip Kofler
+      &middot; <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a>
+    </span>
+    <span class="links">
+      <a href="/">Startseite</a>
+      <a href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

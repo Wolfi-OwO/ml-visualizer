@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1420">
+<title>Perceptron erklärt: Lernregel und Trenngerade am AND-Beispiel | ML Visualizer</title>
+<meta name="description" content="Das Perceptron an der AND-Wahrheitstabelle nachvollziehen: gewichtete Summe, Schwelle, Lernregel und warum die Trenngerade nach jedem Fehler wandert.">
+<meta name="author" content="Phillip Kofler">
+<link rel="canonical" href="https://ml-visualizer.at/perceptron/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="ML Visualizer">
+<meta property="og:title" content="Perceptron erklärt: Lernregel und Trenngerade am AND-Beispiel">
+<meta property="og:description" content="Das Perceptron an der AND-Wahrheitstabelle nachvollziehen: gewichtete Summe, Schwelle, Lernregel und warum die Trenngerade nach jedem Fehler wandert.">
+<meta property="og:url" content="https://ml-visualizer.at/perceptron/">
+<meta property="og:image" content="https://ml-visualizer.at/assets/perceptron.webp">
+<meta property="og:locale" content="de_AT">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Perceptron: ein Neuron, das aus Fehlern lernt",
+  "description": "Das Perceptron an der AND-Wahrheitstabelle nachvollziehen: gewichtete Summe, Schwelle, Lernregel und warum die Trenngerade nach jedem Fehler wandert.",
+  "inLanguage": "de-AT",
+  "datePublished": "2026-11-15",
+  "dateModified": "2026-11-15",
+  "mainEntityOfPage": "https://ml-visualizer.at/perceptron/",
+  "image": "https://ml-visualizer.at/assets/perceptron.webp",
+  "author": {
+    "@type": "Person",
+    "name": "Phillip Kofler",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "ML Visualizer",
+    "url": "https://ml-visualizer.at/"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ML Visualizer",
+      "item": "https://ml-visualizer.at/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Perceptron",
+      "item": "https://ml-visualizer.at/perceptron/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="var(--panel)"/>
+        <path d="M4 8 Q16 30 28 8" fill="none" stroke="var(--muted)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="24.5" r="3.4" fill="var(--signal)"/>
+      </svg>
+      <span class="brand-parent">woofi-developments</span><span class="brand-sep">/</span><span class="brand-name">ml-visualizer</span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <a class="text-link" href="/gradient-descent/">Gradient Descent</a>
+      <a class="text-link" aria-current="page" href="/perceptron/">Perceptron</a>
+      <a class="text-link" href="/k-nearest-neighbors/">k-Nearest-Neighbors</a>
+      <a class="text-link" href="/neuronales-netz/">Feedforward-Netz</a>
+      <a class="btn btn-ghost" href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content">
+  <article class="article">
+    <div class="wrap">
+      <nav class="crumbs" aria-label="Brotkrümel">
+        <a href="/">ML Visualizer</a><span aria-hidden="true">/</span><span aria-current="page">Perceptron</span>
+      </nav>
+      <header class="article-head">
+        <p class="eyebrow">Erklärt</p>
+        <h1>Perceptron: ein Neuron, das aus Fehlern lernt</h1>
+        <p class="lede">Das Perceptron ist das kleinste lernende Modell, das es gibt: zwei Eingänge, ein Ausgang, eine Regel zum Korrigieren. Wer verstanden hat, warum die Trenngerade nach einem Fehler wandert, hat das Grundprinzip hinter jedem neuronalen Netz gesehen.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://app.ml-visualizer.at/perceptron" rel="noopener">Live ausprobieren &rarr;</a>
+        </div>
+      </header>
+
+      <figure class="shot">
+        <img src="/assets/perceptron.webp" width="1440" height="900" alt="Screenshot des Perceptron-Moduls: Die vier AND-Eingabepunkte, die Trenngerade und die aktuellen Gewichte nach einem Trainingsschritt." fetchpriority="high">
+        <figcaption class="caption">Das Modul in der App, mit den Voreinstellungen.</figcaption>
+      </figure>
+
+      <div class="prose">
+<h2>Die Idee</h2>
+<p>Ein Perceptron bildet aus den Eingängen eine gewichtete Summe, addiert einen Bias und vergleicht das Ergebnis mit null. Liegt es darüber oder genau darauf, gibt das Neuron 1 aus, sonst 0. Geometrisch ist das eine Gerade in der Eingabeebene: Punkte auf der einen Seite bekommen die Klasse 1, Punkte auf der anderen die Klasse 0.</p>
+
+<h2>Die Rechnung</h2>
+<pre class="formula"><code>ŷ = 1, falls w₁·x₁ + w₂·x₂ + b ≥ 0, sonst 0
+w ← w + η · (y − ŷ) · x
+b ← b + η · (y − ŷ)</code></pre>
+<p>Dabei ist <code>y</code> die richtige Antwort, <code>ŷ</code> die Vorhersage des Neurons und <code>η</code> die Lernrate. Die Lernregel ist bemerkenswert einfach: Stimmt die Vorhersage, ist <code>y − ŷ</code> gleich null und nichts ändert sich. Liegt das Neuron daneben, werden die Gewichte in Richtung des Eingabepunkts verschoben, bei einer falschen 0 hinein, bei einer falschen 1 davon weg.</p>
+
+<h3>Das Beispiel: AND</h3>
+<table class="params">
+<thead><tr><th scope="col">x₁</th><th scope="col">x₂</th><th scope="col">AND</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>0</td><td>1</td><td>0</td></tr>
+<tr><td>1</td><td>0</td><td>0</td></tr>
+<tr><td>1</td><td>1</td><td>1</td></tr>
+</tbody>
+</table>
+<p>Die Punkte lassen sich mit einer Geraden trennen: der Punkt (1, 1) auf der einen Seite, die anderen drei auf der anderen. Für solche <em>linear trennbaren</em> Daten garantiert der Konvergenzsatz des Perceptrons, dass die Lernregel nach endlich vielen Korrekturen eine passende Gerade findet.</p>
+
+<h2>In der App ausprobieren</h2>
+<ul>
+<li>Die Startgewichte werden zufällig aus dem Bereich −1 bis 1 gezogen. Ändere den Seed, und das Neuron nimmt einen ganz anderen Weg zur selben Lösung.</li>
+<li>Gehe die Trainingsschritte einzeln durch und achte darauf, dass sich die Gerade nur bei einem Fehler bewegt.</li>
+<li>Mit den Voreinstellungen (Lernrate 0,3, Seed 42) braucht das Neuron 6 Epochen. Bei den voreingestellten 5 liegt die Gerade noch daneben und die Genauigkeit steht bei 50 %. Erhöhe die Epochen auf 6, und sie springt auf 100 %.</li>
+</ul>
+
+<h2>Typische Stolperstellen</h2>
+<ul>
+<li><strong>Nicht alles ist trennbar.</strong> XOR lässt sich mit keiner einzelnen Geraden lösen. Genau dort kommt die verborgene Schicht ins Spiel, die du im <a href="/neuronales-netz/">Feedforward-Netz</a> siehst.</li>
+<li><strong>Die Schwelle ist hart.</strong> Das Perceptron kennt nur ja oder nein, keine Sicherheit dazwischen. Der Schritt zu Sigmoid-Neuronen macht die Ausgabe stetig und das Training per Gradient möglich.</li>
+<li><strong>Der Bias ist kein Detail.</strong> Ohne ihn müsste die Trenngerade durch den Ursprung gehen, und AND wäre nicht lösbar.</li>
+</ul>
+      </div>
+
+      <aside class="cta-box" aria-labelledby="cta-title">
+        <h2 id="cta-title">Selbst ausprobieren</h2>
+        <p>Alles, was oben steht, kannst du in der App nachstellen. Kein Konto, nichts zu installieren.</p>
+        <a class="btn btn-primary" href="https://app.ml-visualizer.at/perceptron" rel="noopener">Perceptron öffnen &rarr;</a>
+      </aside>
+
+      <nav class="related" aria-labelledby="related-title">
+        <h2 id="related-title">Die anderen Module</h2>
+        <div class="related-grid">
+        <a class="related-link" href="/gradient-descent/">
+          <span class="path">/gradient-descent/</span>
+          <strong>Gradient Descent</strong>
+        </a>
+        <a class="related-link" href="/k-nearest-neighbors/">
+          <span class="path">/k-nearest-neighbors/</span>
+          <strong>k-Nearest-Neighbors</strong>
+        </a>
+        <a class="related-link" href="/neuronales-netz/">
+          <span class="path">/neuronales-netz/</span>
+          <strong>Feedforward-Netz</strong>
+        </a>
+        </div>
+      </nav>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>
+      Ein Projekt von <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>
+      &middot; Phillip Kofler
+      &middot; <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a>
+    </span>
+    <span class="links">
+      <a href="/">Startseite</a>
+      <a href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

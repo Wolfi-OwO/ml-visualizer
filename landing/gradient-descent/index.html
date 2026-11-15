@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f1420">
+<title>Gradient Descent erklärt: Lernrate, Schrittweite und Konvergenz | ML Visualizer</title>
+<meta name="description" content="Gradient Descent an f(x) = 0,5 x² Schritt für Schritt nachrechnen: Update-Regel, Einfluss der Lernrate, wann es konvergiert, pendelt oder divergiert.">
+<meta name="author" content="Phillip Kofler">
+<link rel="canonical" href="https://ml-visualizer.at/gradient-descent/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="ML Visualizer">
+<meta property="og:title" content="Gradient Descent erklärt: Lernrate, Schrittweite und Konvergenz">
+<meta property="og:description" content="Gradient Descent an f(x) = 0,5 x² Schritt für Schritt nachrechnen: Update-Regel, Einfluss der Lernrate, wann es konvergiert, pendelt oder divergiert.">
+<meta property="og:url" content="https://ml-visualizer.at/gradient-descent/">
+<meta property="og:image" content="https://ml-visualizer.at/assets/gradient-descent.webp">
+<meta property="og:locale" content="de_AT">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="stylesheet" href="/styles.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Gradient Descent: der Weg ins Minimum, Schritt für Schritt",
+  "description": "Gradient Descent an f(x) = 0,5 x² Schritt für Schritt nachrechnen: Update-Regel, Einfluss der Lernrate, wann es konvergiert, pendelt oder divergiert.",
+  "inLanguage": "de-AT",
+  "datePublished": "2026-11-15",
+  "dateModified": "2026-11-15",
+  "mainEntityOfPage": "https://ml-visualizer.at/gradient-descent/",
+  "image": "https://ml-visualizer.at/assets/gradient-descent.webp",
+  "author": {
+    "@type": "Person",
+    "name": "Phillip Kofler",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "woofi-developments",
+    "url": "https://www.woofi-developments.at/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "ML Visualizer",
+    "url": "https://ml-visualizer.at/"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ML Visualizer",
+      "item": "https://ml-visualizer.at/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Gradient Descent",
+      "item": "https://ml-visualizer.at/gradient-descent/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="var(--panel)"/>
+        <path d="M4 8 Q16 30 28 8" fill="none" stroke="var(--muted)" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="24.5" r="3.4" fill="var(--signal)"/>
+      </svg>
+      <span class="brand-parent">woofi-developments</span><span class="brand-sep">/</span><span class="brand-name">ml-visualizer</span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <a class="text-link" aria-current="page" href="/gradient-descent/">Gradient Descent</a>
+      <a class="text-link" href="/perceptron/">Perceptron</a>
+      <a class="text-link" href="/k-nearest-neighbors/">k-Nearest-Neighbors</a>
+      <a class="text-link" href="/neuronales-netz/">Feedforward-Netz</a>
+      <a class="btn btn-ghost" href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content">
+  <article class="article">
+    <div class="wrap">
+      <nav class="crumbs" aria-label="Brotkrümel">
+        <a href="/">ML Visualizer</a><span aria-hidden="true">/</span><span aria-current="page">Gradient Descent</span>
+      </nav>
+      <header class="article-head">
+        <p class="eyebrow">Erklärt</p>
+        <h1>Gradient Descent: der Weg ins Minimum, Schritt für Schritt</h1>
+        <p class="lede">Fast jedes Training in der Machine-Learning-Praxis läuft auf dieselbe Bewegung hinaus: ein Stück bergab, dann neu schauen, wo es bergab geht. Hier siehst du diese Bewegung an der einfachsten Funktion, bei der man sie noch im Kopf nachrechnen kann.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://app.ml-visualizer.at/gradient-descent" rel="noopener">Live ausprobieren &rarr;</a>
+        </div>
+      </header>
+
+      <figure class="shot">
+        <img src="/assets/gradient-descent.webp" width="1440" height="900" alt="Screenshot des Gradient-Descent-Moduls: Die Parabel f(x) = 0,5 x² mit den bisherigen Iterationspunkten, Regler für Startwert, Lernrate und Iterationen." fetchpriority="high">
+        <figcaption class="caption">Das Modul in der App, mit den Voreinstellungen.</figcaption>
+      </figure>
+
+      <div class="prose">
+<h2>Die Idee</h2>
+<p>Gesucht ist ein Wert <code>x</code>, bei dem eine Funktion <code>f(x)</code> möglichst klein wird. Der Gradient, im eindimensionalen Fall einfach die Ableitung <code>f′(x)</code>, zeigt an, in welche Richtung die Funktion steigt. Gradient Descent geht deshalb in die entgegengesetzte Richtung, und zwar um ein Stück, das aus der Steigung und einem Faktor entsteht, der Lernrate.</p>
+
+<h2>Die Rechnung</h2>
+<p>Die Update-Regel besteht aus einer einzigen Zeile:</p>
+<pre class="formula"><code>x_neu = x − η · f′(x)</code></pre>
+<p>Das Modul rechnet mit <code>f(x) = 0,5 · x²</code>. Die Ableitung ist <code>f′(x) = x</code>, die Regel wird also zu <code>x_neu = (1 − η) · x</code>. Bei jedem Schritt schrumpft <code>x</code> um den Faktor <code>(1 − η)</code>. Mit den Voreinstellungen, Startwert 8 und Lernrate 0,1, ergibt das nach 20 Schritten <code>8 · 0,9²⁰ ≈ 0,97</code>: das Minimum bei 0 ist dann noch nicht erreicht.</p>
+
+<h3>Was die Lernrate bewirkt</h3>
+<table class="params">
+<thead><tr><th scope="col">Lernrate η</th><th scope="col">Faktor 1 − η</th><th scope="col">Verhalten bei dieser Funktion</th></tr></thead>
+<tbody>
+<tr><td>0 &lt; η &lt; 1</td><td>zwischen 0 und 1</td><td>Annäherung von einer Seite, je kleiner η, desto langsamer</td></tr>
+<tr><td>η = 1</td><td>0</td><td>landet nach einem Schritt exakt im Minimum</td></tr>
+<tr><td>1 &lt; η &lt; 2</td><td>zwischen −1 und 0</td><td>springt über das Minimum hin und her, die Ausschläge werden kleiner</td></tr>
+<tr><td>η = 2</td><td>−1</td><td>pendelt für immer zwischen +x und −x</td></tr>
+<tr><td>η &gt; 2</td><td>kleiner als −1</td><td>die Ausschläge wachsen, das Verfahren divergiert</td></tr>
+</tbody>
+</table>
+<p>Die Grenze bei 2 gilt für genau diese Parabel. Bei anderen Funktionen hängt sie von der Krümmung ab, aber das Muster bleibt: Zu kleine Lernraten kosten Zeit, zu große zerstören die Konvergenz.</p>
+
+<h2>In der App ausprobieren</h2>
+<ul>
+<li>Lass die Lernrate bei 0,1 und schiebe den Schrittregler von Hand vor und zurück. So siehst du, dass jeder Schritt kürzer wird als der davor, weil die Steigung zum Minimum hin flacher wird.</li>
+<li>Setze die Lernrate auf 1 und dann auf 1,5. Der erste Wert trifft sofort, der zweite überspringt das Minimum bei jedem Schritt.</li>
+<li>Erhöhe die Lernrate über 2 und sieh zu, wie die Punkte aus dem Diagramm laufen.</li>
+<li>Ändere den Startwert: Er verschiebt nur, wie viele Schritte du brauchst, nicht, ob du ankommst.</li>
+</ul>
+
+<h2>Typische Stolperstellen</h2>
+<ul>
+<li><strong>Eine feste Lernrate passt selten überall.</strong> In echten Modellen ist die Krümmung nicht konstant, deshalb gibt es Verfahren wie Momentum oder Adam, die die Schrittweite anpassen.</li>
+<li><strong>Lokale Minima.</strong> Diese Parabel hat genau ein Minimum. Bei komplizierteren Funktionen hängt es vom Startpunkt ab, in welchem Tal das Verfahren landet.</li>
+<li><strong>Abbruchkriterium.</strong> Die App läuft eine feste Anzahl Iterationen. In der Praxis hört man auf, wenn sich der Funktionswert kaum noch ändert.</li>
+</ul>
+      </div>
+
+      <aside class="cta-box" aria-labelledby="cta-title">
+        <h2 id="cta-title">Selbst ausprobieren</h2>
+        <p>Alles, was oben steht, kannst du in der App nachstellen. Kein Konto, nichts zu installieren.</p>
+        <a class="btn btn-primary" href="https://app.ml-visualizer.at/gradient-descent" rel="noopener">Gradient Descent öffnen &rarr;</a>
+      </aside>
+
+      <nav class="related" aria-labelledby="related-title">
+        <h2 id="related-title">Die anderen Module</h2>
+        <div class="related-grid">
+        <a class="related-link" href="/perceptron/">
+          <span class="path">/perceptron/</span>
+          <strong>Perceptron</strong>
+        </a>
+        <a class="related-link" href="/k-nearest-neighbors/">
+          <span class="path">/k-nearest-neighbors/</span>
+          <strong>k-Nearest-Neighbors</strong>
+        </a>
+        <a class="related-link" href="/neuronales-netz/">
+          <span class="path">/neuronales-netz/</span>
+          <strong>Feedforward-Netz</strong>
+        </a>
+        </div>
+      </nav>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>
+      Ein Projekt von <a href="https://www.woofi-developments.at" rel="noopener">woofi-developments</a>
+      &middot; Phillip Kofler
+      &middot; <a href="mailto:koflerphillip@gmail.com">koflerphillip@gmail.com</a>
+    </span>
+    <span class="links">
+      <a href="/">Startseite</a>
+      <a href="https://app.ml-visualizer.at" rel="noopener">App öffnen</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>
