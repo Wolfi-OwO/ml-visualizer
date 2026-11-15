@@ -20,7 +20,7 @@ from utils.theme import (
 
 DEFAULT_CONFIG = {
     "lr": 0.3,
-    "epochs": 5,
+    "epochs": 6,
     "seed": 42,
     "animate": True,
 }

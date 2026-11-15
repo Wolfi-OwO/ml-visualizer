@@ -198,6 +198,43 @@ class TestPerceptron:
             assert X[i, 0] == x1 and X[i, 1] == x2, f"Input {i} should be [{x1}, {x2}]"
             assert y[i] == expected, f"Output {i} should be {expected}"
 
+    def test_perceptron_default_config_solves_and(self):
+        """The demo's preset values must end at 100 % accuracy.
+
+        With epochs=5 the preset (lr 0.3, seed 42) stopped one epoch short at
+        50 %, so the first thing a visitor saw was a model that had not
+        learned. The values are read from perceptron.py itself so this fails
+        if someone changes the preset without re-checking it.
+        """
+        import ast
+
+        source_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "pages", "perceptron.py"
+        )
+        with open(source_path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        config = next(
+            ast.literal_eval(node.value)
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(getattr(target, "id", None) == "DEFAULT_CONFIG" for target in node.targets)
+        )
+
+        X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]], dtype=float)
+        y = np.array([0, 0, 0, 1])
+        rng = np.random.default_rng(config["seed"])
+        weights = rng.uniform(-1.0, 1.0, size=2)
+        bias = float(rng.uniform(-1.0, 1.0))
+        for _ in range(config["epochs"]):
+            for features, target in zip(X, y, strict=True):
+                prediction = 1 if float(features @ weights + bias) >= 0 else 0
+                error = target - prediction
+                weights = weights + config["lr"] * error * features
+                bias += config["lr"] * error
+
+        predictions = ((X @ weights + bias) >= 0).astype(int)
+        assert np.array_equal(predictions, y), "Preset perceptron must classify all four AND rows"
+
     def test_perceptron_activation(self):
         """Test perceptron activation function."""
 
