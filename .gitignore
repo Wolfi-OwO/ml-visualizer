@@ -32,3 +32,6 @@ build/
 .env
 .env.local
 *.local
+
+# browser automation scratch output
+.playwright-mcp/
