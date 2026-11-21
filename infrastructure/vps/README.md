@@ -13,7 +13,7 @@ The app runs on the Contabo VPS next to the other personal apps. Caddy (owned by
 
 ## How a deploy works
 
-1. A `v*` tag builds `registry.gitlab.com/woofiowo/5bhif-datascience-webapp:<tag>`.
+1. A `v*` tag builds `registry.gitlab.com/woofiowo/ml-visualizer:<tag>`.
 2. The manual `deploy-production` job runs `ssh deploy@VPS <tag>`. The key is bound to `/opt/dsai/deploy.sh`, so it can run nothing else.
 3. `deploy.sh` starts the idle slot, requires three consecutive healthy answers from `/_stcore/health`, rewrites the `reverse_proxy dsai-<slot>:8080` line in the Caddyfile, reloads Caddy through `/opt/caddy-reload.sh` and removes the old slot. If the health check or the Caddy reload fails, the live slot keeps all traffic.
 4. The job finishes with an end-to-end `curl` against `PRODUCTION_URL`.

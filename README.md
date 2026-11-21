@@ -5,7 +5,7 @@
 **Four classical machine learning algorithms, explained by watching them run.**
 A Streamlit app where every plot is live: drag a slider and the gradient descent step, the perceptron weight or the KNN classification recomputes in front of you.
 
-[![pipeline status](https://gitlab.com/WoofiOwO/5bhif-datascience-webapp/badges/main/pipeline.svg)](https://gitlab.com/WoofiOwO/5bhif-datascience-webapp/-/commits/main)
+[![pipeline status](https://gitlab.com/WoofiOwO/ml-visualizer/badges/main/pipeline.svg)](https://gitlab.com/WoofiOwO/ml-visualizer/-/commits/main)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776ab?logo=python&logoColor=white)

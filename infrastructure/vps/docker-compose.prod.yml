@@ -16,7 +16,7 @@
 # VPS is logged in with a read-only deploy token (~/.docker/config.json).
 
 x-dsai: &dsai-base
-  image: ${IMAGE_REPO:-registry.gitlab.com/woofiowo/5bhif-datascience-webapp}:${IMAGE_TAG:-latest}
+  image: ${IMAGE_REPO:-registry.gitlab.com/woofiowo/ml-visualizer}:${IMAGE_TAG:-latest}
   restart: unless-stopped
   env_file:
     - .env
