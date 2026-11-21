@@ -26,7 +26,7 @@ The manual `deploy-review` job calls the shared runner (`/opt/previews/run.sh`) 
 
 DNS needs one wildcard record: `*.dsai.preview` A `167.86.115.79` in the `woofi-developments.at` zone.
 
-## CI variables (GitLab, project 76772967)
+## CI variables (GitLab, project 89265654)
 
 | Variable | Notes |
 | --- | --- |
