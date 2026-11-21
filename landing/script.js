@@ -90,7 +90,7 @@
     var caption = document.getElementById("hero-caption-x");
     var captionStep = document.getElementById("hero-caption-step");
     if (caption) caption.textContent = "x = " + x.toFixed(3);
-    if (captionStep) captionStep.textContent = "step " + step + "/" + ITERATIONS;
+    if (captionStep) captionStep.textContent = "Schritt " + step + "/" + ITERATIONS;
   }
 
   var reduceMotion = window.matchMedia(
