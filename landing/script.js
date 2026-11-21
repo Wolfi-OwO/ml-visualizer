@@ -40,15 +40,17 @@
     return padding.top + plotH - (y / fMax) * plotH;
   }
 
-  var ruleColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--rule")
-    .trim();
-  var mutedColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--muted")
-    .trim();
-  var signalColor = getComputedStyle(document.documentElement)
-    .getPropertyValue("--signal")
-    .trim();
+  var ruleColor, mutedColor, signalColor;
+
+  // Read from the CSS tokens so the canvas follows the theme; called again
+  // whenever the theme switch changes them.
+  function readColors() {
+    var cs = getComputedStyle(document.documentElement);
+    ruleColor = cs.getPropertyValue("--rule").trim();
+    mutedColor = cs.getPropertyValue("--muted").trim();
+    signalColor = cs.getPropertyValue("--signal").trim();
+  }
+  readColors();
 
   function drawStatic() {
     ctx.clearRect(0, 0, cssWidth, cssHeight);
@@ -78,7 +80,12 @@
     ctx.stroke();
   }
 
+  var lastX = X0;
+  var lastStep = 0;
+
   function drawBall(x, step) {
+    lastX = x;
+    lastStep = step;
     var cx = toCanvasX(x);
     var cy = toCanvasY(f(x));
 
@@ -92,6 +99,12 @@
     if (caption) caption.textContent = "x = " + x.toFixed(3);
     if (captionStep) captionStep.textContent = "Schritt " + step + "/" + ITERATIONS;
   }
+
+  document.addEventListener("themechange", function () {
+    readColors();
+    drawStatic();
+    drawBall(lastX, lastStep);
+  });
 
   var reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"

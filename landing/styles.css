@@ -85,8 +85,11 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
+/* Three modes: no attribute follows the system, data-theme pins one. The dark
+   values are written twice because CSS cannot share a block between a media
+   query and an attribute selector. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --canvas: #12161d;
     --panel: #1a1f29;
     --panel-raised: #212735;
@@ -101,6 +104,27 @@
     --contrast: #46c9c0;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.7);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #12161d;
+  --panel: #1a1f29;
+  --panel-raised: #212735;
+  --rule: #2b3240;
+  --ink: #e9ecf2;
+  --muted: #9aa3b5;
+  --signal: #ff8f4d;
+  --signal-hover: #ffa566;
+  --signal-dim: #7d5a42;
+  --link: #ff9a5c;
+  --on-signal: #1a0f05;
+  --contrast: #46c9c0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 * {
@@ -255,6 +279,57 @@ h3 {
   .brand-parent {
     display: none;
   }
+}
+
+/* Brand, theme switch and the button do not fit on a phone. The page already
+   carries its own "App öffnen" action right under the headline. */
+@media (max-width: 480px) {
+  .topbar nav .btn {
+    display: none;
+  }
+}
+
+/* ---------- Theme switch ---------- */
+
+.theme-switch {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 2px;
+  gap: 2px;
+}
+
+.theme-switch button {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), background-color 0.15s var(--ease);
+}
+
+.theme-switch button:hover {
+  color: var(--ink);
+}
+
+.theme-switch button[aria-pressed="true"] {
+  background: var(--panel-raised);
+  color: var(--ink);
+}
+
+.theme-switch svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* ---------- Buttons and links ---------- */
